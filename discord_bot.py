@@ -80,10 +80,7 @@ class LeagueDiscordBot(discord.Client):
         while not self.is_closed():
             logging.info("Checking for new matches...")
             try:
-                # Run the check (Note: tracker is sync, but fast enough? Or wrap in executor?)
-                # For safety/best practice, wrap in executor
-            try:
-                # Run the check with a strict timeout of 45 seconds (Script runs every 120s locally or once on GH)
+                # Run the check with a strict timeout of 60 seconds (Script runs every 120s locally or once on GH)
                 # On GH, we want it to die fast if stuck.
                 loop = asyncio.get_event_loop()
                 alerts = await asyncio.wait_for(
