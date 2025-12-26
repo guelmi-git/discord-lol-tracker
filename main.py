@@ -26,22 +26,38 @@ def main():
         return
     
     # Get Credentials
-    # Check config first, then env vars
-    riot_api_key = config.get('riot_api_key') or os.getenv('RIOT_API_KEY')
-    discord_token = config.get('discord_bot_token') or os.getenv('DISCORD_BOT_TOKEN')
-    channel_id = config.get('discord_channel_id')
+    # PRIORITY: Environment Variables (GitHub Secrets) > Config File (Local)
     
-    if not riot_api_key or "YOUR_RIOT" in riot_api_key:
-        logging.error("Riot API Key is missing or default in config.json")
-        return
+    riot_api_key = os.getenv('RIOT_API_KEY')
+    if not riot_api_key:
+        val = config.get('riot_api_key')
+        if val and "YOUR_RIOT" not in val:
+            riot_api_key = val
+
+    discord_token = os.getenv('DISCORD_BOT_TOKEN')
+    if not discord_token:
+        val = config.get('discord_bot_token')
+        if val and "YOUR_DISCORD" not in val:
+            discord_token = val
+
+    channel_id_str = os.getenv('DISCORD_CHANNEL_ID')
+    if not channel_id_str:
+        val = config.get('discord_channel_id')
+        if val and str(val) != "YOUR_CHANNEL_ID":
+            channel_id_str = str(val)
+
+    # Validation
+    if not riot_api_key:
+        logging.error("CRITICAL: Riot API Key is missing! Set RIOT_API_KEY env var or update config.json")
+        return # Exit
         
-    if not discord_token or "YOUR_DISCORD" in discord_token:
-        logging.error("Discord Token is missing or default in config.json")
-        return
+    if not discord_token:
+        logging.error("CRITICAL: Discord Token is missing! Set DISCORD_BOT_TOKEN env var or update config.json")
+        return # Exit
         
-    if not channel_id:
-        logging.error("Discord Channel ID is missing in config.json")
-        return
+    if not channel_id_str:
+        logging.error("CRITICAL: Discord Channel ID is missing!")
+        return # Exit
 
     # Initialize Components
     riot_client = RiotClient(riot_api_key)
@@ -53,7 +69,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize Bot
-    bot = LeagueDiscordBot(token=discord_token, channel_id=int(channel_id), tracker=tracker, one_shot=args.one_shot)
+    bot = LeagueDiscordBot(token=discord_token, channel_id=int(channel_id_str), tracker=tracker, one_shot=args.one_shot)
     
     # Run Bot
     bot.run(discord_token)
