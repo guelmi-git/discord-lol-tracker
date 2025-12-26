@@ -1,8 +1,10 @@
 name: LoL Tracker Bot
 
 on:
+  push:
+    branches: [ "main" ] # Run immediately when code is updated
   schedule:
-    - cron: '*/5 * * * *' # Run every 10 minutes
+    - cron: '*/5 * * * *' # Run every 5 minutes (GitHub Actions minimum)
   workflow_dispatch: # Allow manual trigger
 
 jobs:

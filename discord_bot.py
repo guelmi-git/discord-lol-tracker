@@ -42,6 +42,25 @@ class LeagueDiscordBot(discord.Client):
         self.channel_id = int(channel_id)
         self.tracker = tracker
         self.one_shot = one_shot
+        
+        # Load Roasts
+        try:
+             import json
+             with open('roasts.json', 'r', encoding='utf-8') as f:
+                 self.CHAMPION_ROASTS = json.load(f)
+             logging.info(f"Loaded {len(self.CHAMPION_ROASTS)} champion roasts.")
+        except Exception as e:
+             logging.error(f"Failed to load roasts.json: {e}")
+             self.CHAMPION_ROASTS = {}
+
+        # Load Praises
+        try:
+             with open('praises.json', 'r', encoding='utf-8') as f:
+                 self.CHAMPION_PRAISES = json.load(f)
+             logging.info(f"Loaded {len(self.CHAMPION_PRAISES)} champion praises.")
+        except Exception as e:
+             logging.error(f"Failed to load praises.json: {e}")
+             self.CHAMPION_PRAISES = {}
 
     async def on_ready(self):
         logging.info(f'Logged in as {self.user} (ID: {self.user.id})')
@@ -106,7 +125,7 @@ class LeagueDiscordBot(discord.Client):
                 logging.error(f"Error in polling loop: {e}")
             
             if self.one_shot:
-                logging.info("One-shot run complete. Closing bot.")
+                logging.info("One-shot mode finished. Exiting.")
                 await self.close()
                 break
                 
@@ -126,7 +145,56 @@ class LeagueDiscordBot(discord.Client):
         title = f"{'🏆' if win else '💀'} {outcome} as {champion_name}"
 
         # Flavor Text
-        flavor_text = random.choice(self.VICTORY_MESSAGES) if win else random.choice(self.DEFEAT_MESSAGES)
+        if win:
+            # Contextual Praise Logic
+            generic_praise = random.choice(self.VICTORY_MESSAGES)
+            specific_praise = None
+            
+            cham_key = champion_name
+            if cham_key not in self.CHAMPION_PRAISES:
+                 cham_key = champion_name.replace(" ", "")
+            
+            if cham_key in self.CHAMPION_PRAISES:
+                specific_praise = random.choice(self.CHAMPION_PRAISES[cham_key])
+            
+            if specific_praise:
+                flavor_text = random.choice([generic_praise, specific_praise])
+            else:
+                flavor_text = generic_praise
+        else:
+            # Contextual Roast Logic:
+            # We want to mix Generic Taunts and Champion Specific Taunts (if available).
+            # To ensure variety ("alterné"), we pick randomly between the two categories with equal weight.
+            
+            # 1. Pick a random generic message
+            generic_roast = random.choice(self.DEFEAT_MESSAGES)
+            
+            # 2. Pick a random specific message (if exists)
+            specific_roast = None
+            # Handle spaces/casing just in case (e.g. "Lee Sin" vs "LeeSin" key in json)
+            # My JSON has keys like "LeeSin", "MissFortune" (PascalCase no space) or "Lee Sin"? 
+            # Let's check my JSON content... I wrote "LeeSin", "MissFortune" etc?
+            # Actually I wrote "LeeSin". But `champion_name` comes from API.
+            # API usually gives "LeeSin" as ID, but "Lee Sin" as name...
+            # Wait, `champion_name` in `create_match_embed` comes from `participant_info['championName']`.
+            # In MatchV5, `championName` is usually the ID (e.g. "MonkeyKing" for Wukong, "LeeSin" for Lee Sin).
+            # So direct key lookup should work if my keys match MatchV5 IDs.
+            # I used standard names in JSON. Let's try direct look up, if fail try removing spaces.
+            
+            cham_key = champion_name
+            if cham_key not in self.CHAMPION_ROASTS:
+                 # Try removing spaces
+                 cham_key = champion_name.replace(" ", "")
+            
+            if cham_key in self.CHAMPION_ROASTS:
+                specific_roast = random.choice(self.CHAMPION_ROASTS[cham_key])
+            
+            # 3. Choose between them
+            # If specific exists, 50% chance of each. Else 100% generic.
+            if specific_roast:
+                flavor_text = random.choice([generic_roast, specific_roast])
+            else:
+                flavor_text = generic_roast
 
         embed = discord.Embed(title=title, description=f"*{flavor_text}*", color=color)
         
