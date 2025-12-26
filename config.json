@@ -1,7 +1,7 @@
 {
-    "riot_api_key": "RGAPI-ee7b90ff-462a-40c4-ad5a-33d876113d43",
-    "discord_bot_token": "MTQ1MzAzNTcyNzg1NTE1NzI3MA.Gz5Dow.Yr5C66GVY3QE6yRJaOK5EUx8INvYNrviwM89Ww",
-    "discord_channel_id": 1453036167317553182,
+    "riot_api_key": "YOUR_RIOT_API_KEY",
+    "discord_bot_token": "YOUR_DISCORD_BOT_TOKEN",
+    "discord_channel_id": "YOUR_CHANNEL_ID",
     "players": [
         {
             "riot_id": "Guelmi#9595",
