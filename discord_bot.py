@@ -59,15 +59,13 @@ class LeagueDiscordBot(discord.Client):
             
             # Initialize Tracker (Sync method running in executor)
             loop = asyncio.get_event_loop()
-            if self.one_shot:
-                 logging.info('Initializing tracker for one-shot mode...')
-                 await loop.run_in_executor(None, self.tracker.initialize_players)
-            else:
-                 logging.info('Initializing tracker...')
-                 summary = await loop.run_in_executor(None, self.tracker.initialize_players)
-                 if summary:
-                     desc = "✅ **Tracking activé ! Classement actuel :**\n" + "\n".join(summary)
-                     await channel.send(embed=discord.Embed(title="Bot Started", description=desc, color=discord.Color.blue()))
+            logging.info('Initializing tracker...')
+            summary = await loop.run_in_executor(None, self.tracker.initialize_players)
+            
+            # Send summary if available (for both one-shot and continuous)
+            if summary:
+                 desc = "✅ **Tracking activé ! Classement actuel :**\n" + "\n".join(summary)
+                 await channel.send(embed=discord.Embed(title="Bot Started", description=desc, color=discord.Color.blue()))
 
 
         logging.info('Tracker initialized. Starting polling loop.')
