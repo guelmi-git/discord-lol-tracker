@@ -142,23 +142,59 @@ class LeagueDiscordBot(discord.Client):
             return None
 
     def _combine_images_sync(self, champion_id, rank_tier):
-        from PIL import Image
+        from PIL import Image, ImageOps, ImageDraw
         import requests
         from io import BytesIO
+
+        # Helper to treat images
+        def crop_transparency(img):
+            bbox = img.getbbox()
+            if bbox:
+                return img.crop(bbox)
+            return img
+
+        def add_corners(im, rad):
+            circle = Image.new('L', (rad * 2, rad * 2), 0)
+            draw = ImageDraw.Draw(circle)
+            draw.ellipse((0, 0, rad * 2, rad * 2), fill=255)
+            alpha = Image.new('L', im.size, 255)
+            w, h = im.size
+            alpha.paste(circle.crop((0, 0, rad, rad)), (0, 0))
+            alpha.paste(circle.crop((0, rad, rad, rad * 2)), (0, h - rad))
+            alpha.paste(circle.crop((rad, 0, rad * 2, rad)), (w - rad, 0))
+            alpha.paste(circle.crop((rad, rad, rad * 2, rad * 2)), (w - rad, h - rad))
+            im.putalpha(alpha)
+            return im
 
         # 1. Download Champion Icon
         champ_url = f"https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/{champion_id}.png"
         resp_champ = requests.get(champ_url)
         img_champ = Image.open(BytesIO(resp_champ.content)).convert("RGBA")
+        
+        # Resize Champion to a fixed good quality size
+        target_width = 256
+        img_champ = img_champ.resize((target_width, target_width), Image.Resampling.LANCZOS)
+        
+        # Apply Modern Rounded Corners to Champion
+        # Creating a rounded rectangle mask
+        mask = Image.new("L", (target_width, target_width), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.rounded_rectangle((0, 0, target_width, target_width), radius=40, fill=255)
+        
+        # Apply mask
+        img_champ_rounded = Image.new("RGBA", (target_width, target_width))
+        img_champ_rounded.paste(img_champ, (0, 0), mask=mask)
+        img_champ = img_champ_rounded
 
         # 2. Download Rank Emblem
-        # If unranked or unknown, maybe just return champion image?
-        # Let's assume we always want to show something if rank exists.
         img_rank = None
         if rank_tier in self.RANK_EMBLEMS:
             rank_url = self.RANK_EMBLEMS[rank_tier]
             resp_rank = requests.get(rank_url)
             img_rank = Image.open(BytesIO(resp_rank.content)).convert("RGBA")
+            
+            # CRITICAL: Crop transparent borders to avoid "tiny image" effect
+            img_rank = crop_transparency(img_rank)
 
         if not img_rank:
             # Just return champion image as file
@@ -168,18 +204,19 @@ class LeagueDiscordBot(discord.Client):
             return discord.File(b, filename="combined.png")
 
         # 3. Resize Rank to match Champion Width (maintain aspect ratio)
-        # Champion icons are usually square.
-        base_width = img_champ.width
+        # We want the rank to be the same width as the champion icon (256px)
+        base_width = target_width
         w_percent = (base_width / float(img_rank.width))
         h_size = int((float(img_rank.height) * float(w_percent)))
         img_rank = img_rank.resize((base_width, h_size), Image.Resampling.LANCZOS)
 
-        # 4. Create Composite Image (Vertical Stack)
-        total_height = img_champ.height + img_rank.height
+        # 4. Create Composite Image (Vertical Stack with spacing)
+        spacing = 10
+        total_height = img_champ.height + img_rank.height + spacing
         combined = Image.new("RGBA", (base_width, total_height))
         
         combined.paste(img_champ, (0, 0), img_champ)
-        combined.paste(img_rank, (0, img_champ.height), img_rank)
+        combined.paste(img_rank, (0, img_champ.height + spacing), img_rank)
 
         # 5. Save to Bytes
         output_buffer = BytesIO()
