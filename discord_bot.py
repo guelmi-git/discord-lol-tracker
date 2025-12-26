@@ -113,9 +113,9 @@ class LeagueDiscordBot(discord.Client):
                     participant = next((p for p in match['info']['participants'] if p['puuid'] == p_data['puuid']), None)
                     
                     if participant:
-                        embed = self.create_match_embed(p_data, match, participant, alert['rank'], alert['lp_diff'])
+                        embed, file_attachment = await self.create_match_embed(p_data, match, participant, alert['rank'], alert['lp_diff'])
                         if channel:
-                            await channel.send(embed=embed)
+                            await channel.send(embed=embed, file=file_attachment)
                         else:
                             logging.error("Channel not available for sending alert.")
             
@@ -131,10 +131,67 @@ class LeagueDiscordBot(discord.Client):
                 
             await asyncio.sleep(120) # 2 minutes
     
-    def create_match_embed(self, player_data, match_info, participant_info, rank_info, lp_diff):
+    async def combine_images_async(self, champion_id, rank_tier):
+        """Downloads Champion Icon and Rank Emblem, stacks them vertically, and returns a discord.File."""
+        try:
+            # Run blocking image processing in executor
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, self._combine_images_sync, champion_id, rank_tier)
+        except Exception as e:
+            logging.error(f"Failed to combine images: {e}")
+            return None
+
+    def _combine_images_sync(self, champion_id, rank_tier):
+        from PIL import Image
+        import requests
+        from io import BytesIO
+
+        # 1. Download Champion Icon
+        champ_url = f"https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/{champion_id}.png"
+        resp_champ = requests.get(champ_url)
+        img_champ = Image.open(BytesIO(resp_champ.content)).convert("RGBA")
+
+        # 2. Download Rank Emblem
+        # If unranked or unknown, maybe just return champion image?
+        # Let's assume we always want to show something if rank exists.
+        img_rank = None
+        if rank_tier in self.RANK_EMBLEMS:
+            rank_url = self.RANK_EMBLEMS[rank_tier]
+            resp_rank = requests.get(rank_url)
+            img_rank = Image.open(BytesIO(resp_rank.content)).convert("RGBA")
+
+        if not img_rank:
+            # Just return champion image as file
+            b = BytesIO()
+            img_champ.save(b, format="PNG")
+            b.seek(0)
+            return discord.File(b, filename="combined.png")
+
+        # 3. Resize Rank to match Champion Width (maintain aspect ratio)
+        # Champion icons are usually square.
+        base_width = img_champ.width
+        w_percent = (base_width / float(img_rank.width))
+        h_size = int((float(img_rank.height) * float(w_percent)))
+        img_rank = img_rank.resize((base_width, h_size), Image.Resampling.LANCZOS)
+
+        # 4. Create Composite Image (Vertical Stack)
+        total_height = img_champ.height + img_rank.height
+        combined = Image.new("RGBA", (base_width, total_height))
+        
+        combined.paste(img_champ, (0, 0), img_champ)
+        combined.paste(img_rank, (0, img_champ.height), img_rank)
+
+        # 5. Save to Bytes
+        output_buffer = BytesIO()
+        combined.save(output_buffer, format="PNG")
+        output_buffer.seek(0)
+        
+        return discord.File(output_buffer, filename="combined.png")
+
+    async def create_match_embed(self, player_data, match_info, participant_info, rank_info, lp_diff):
         """Creates a modern 'Pro/Esport' style embed for the match result"""
         win = participant_info['win']
-        game_duration = match_info['info'].get('gameDuration', 0) # Access gameDuration from 'info'
+        game_duration = match_info['info'].get('gameDuration', 0)
         minutes = game_duration // 60
         seconds = game_duration % 60
         
@@ -163,34 +220,15 @@ class LeagueDiscordBot(discord.Client):
                 flavor_text = generic_praise
         else:
             # Contextual Roast Logic:
-            # We want to mix Generic Taunts and Champion Specific Taunts (if available).
-            # To ensure variety ("alterné"), we pick randomly between the two categories with equal weight.
-            
-            # 1. Pick a random generic message
             generic_roast = random.choice(self.DEFEAT_MESSAGES)
-            
-            # 2. Pick a random specific message (if exists)
             specific_roast = None
-            # Handle spaces/casing just in case (e.g. "Lee Sin" vs "LeeSin" key in json)
-            # My JSON has keys like "LeeSin", "MissFortune" (PascalCase no space) or "Lee Sin"? 
-            # Let's check my JSON content... I wrote "LeeSin", "MissFortune" etc?
-            # Actually I wrote "LeeSin". But `champion_name` comes from API.
-            # API usually gives "LeeSin" as ID, but "Lee Sin" as name...
-            # Wait, `champion_name` in `create_match_embed` comes from `participant_info['championName']`.
-            # In MatchV5, `championName` is usually the ID (e.g. "MonkeyKing" for Wukong, "LeeSin" for Lee Sin).
-            # So direct key lookup should work if my keys match MatchV5 IDs.
-            # I used standard names in JSON. Let's try direct look up, if fail try removing spaces.
-            
             cham_key = champion_name
             if cham_key not in self.CHAMPION_ROASTS:
-                 # Try removing spaces
                  cham_key = champion_name.replace(" ", "")
             
             if cham_key in self.CHAMPION_ROASTS:
                 specific_roast = random.choice(self.CHAMPION_ROASTS[cham_key])
             
-            # 3. Choose between them
-            # If specific exists, 50% chance of each. Else 100% generic.
             if specific_roast:
                 flavor_text = random.choice([generic_roast, specific_roast])
             else:
@@ -200,7 +238,7 @@ class LeagueDiscordBot(discord.Client):
         
         # 2. Author (Player Name)
         riot_id = f"{player_data['riot_id']}"
-        embed.set_author(name=f"{riot_id} • Ranked Solo/Duo", icon_url="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png") # Placeholder icon or bot icon
+        embed.set_author(name=f"{riot_id} • Ranked Solo/Duo", icon_url="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png")
 
         # 3. Stats Line (KDA, CS)
         kills = participant_info['kills']
@@ -212,7 +250,7 @@ class LeagueDiscordBot(discord.Client):
         stats_line = f"**{kills}/{deaths}/{assists}** (KDA: {kda_calc:.2f}) • **{cs} CS**"
         embed.add_field(name="Performance", value=stats_line, inline=False)
 
-        # 4. Rank & LP (The 'Pro' Visual)
+        # 4. Rank & LP
         tier = rank_info['tier'] if rank_info else "UNRANKED"
         rank = rank_info['rank'] if rank_info else ""
         lp = rank_info['leaguePoints'] if rank_info else 0
@@ -229,19 +267,17 @@ class LeagueDiscordBot(discord.Client):
 
         embed.add_field(name="Rank Update", value=rank_display, inline=True)
         
-        # 5. Visuals
-        # Thumbnail: Champion Icon (Restored)
+        # 5. Visuals - Composite Image
         champ_id = participant_info.get('championId')
-        if champ_id:
-            champ_icon_url = f"https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/{champ_id}.png"
-            embed.set_thumbnail(url=champ_icon_url)
-
-        # Image: Rank Emblem (Bigger)
-        # Note: Rank emblems might be large, but this makes them very visible as requested.
-        if tier in self.RANK_EMBLEMS:
-            embed.set_image(url=self.RANK_EMBLEMS[tier])
+        file_attachment = None
         
+        if champ_id:
+             # Generate the combined image (Champion + Rank)
+             file_attachment = await self.combine_images_async(champ_id, tier)
+             if file_attachment:
+                 embed.set_thumbnail(url="attachment://combined.png")
+
         # Footer
         embed.set_footer(text=f"Match Duration: {minutes}m {seconds}s")
         
-        return embed
+        return embed, file_attachment

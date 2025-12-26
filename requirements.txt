@@ -2,3 +2,4 @@ discord.py
 riotwatcher
 python-dotenv
 requests
+Pillow
