@@ -56,7 +56,7 @@ class PlayerTracker:
                 logging.info(f"New player detected: {riot_id} ({puuid})")
                 
                 # Fetch baseline
-                matches = self.riot_client.get_match_history(puuid, count=1)
+                matches = self.riot_client.get_last_matches(puuid, count=1)
                 last_match_id = matches[0] if matches else None
                 
                 rank_stats = self.riot_client.get_rank_stats(puuid)
@@ -88,7 +88,7 @@ class PlayerTracker:
         for puuid, data in self.players.items():
             try:
                 # Get latest match
-                history = self.riot_client.get_match_history(puuid, count=1)
+                history = self.riot_client.get_last_matches(puuid, count=1)
                 if not history:
                     continue
                 
