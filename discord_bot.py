@@ -230,9 +230,16 @@ class LeagueDiscordBot(discord.Client):
         embed.add_field(name="Rank Update", value=rank_display, inline=True)
         
         # 5. Visuals
-        # Thumbnail: Rank Emblem (The 'Esport' feel)
+        # Thumbnail: Champion Icon (Restored)
+        champ_id = participant_info.get('championId')
+        if champ_id:
+            champ_icon_url = f"https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/{champ_id}.png"
+            embed.set_thumbnail(url=champ_icon_url)
+
+        # Image: Rank Emblem (Bigger)
+        # Note: Rank emblems might be large, but this makes them very visible as requested.
         if tier in self.RANK_EMBLEMS:
-            embed.set_thumbnail(url=self.RANK_EMBLEMS[tier])
+            embed.set_image(url=self.RANK_EMBLEMS[tier])
         
         # Footer
         embed.set_footer(text=f"Match Duration: {minutes}m {seconds}s")
