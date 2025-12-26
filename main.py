@@ -59,20 +59,36 @@ def main():
         logging.error("CRITICAL: Discord Channel ID is missing!")
         return # Exit
 
-    # Initialize Components
-    riot_client = RiotClient(riot_api_key)
-    tracker = PlayerTracker(riot_client, config['players'])
-    # Parse Args
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--one-shot", action="store_true", help="Run once and exit (for Cron/GitHub Actions)")
-    args = parser.parse_args()
+    logging.info(f"Credentials loaded. Channel ID: {channel_id_str}")
 
-    # Initialize Bot
-    bot = LeagueDiscordBot(token=discord_token, channel_id=int(channel_id_str), tracker=tracker, one_shot=args.one_shot)
-    
-    # Run Bot
-    bot.run(discord_token)
+    # Initialize Components
+    try:
+        riot_client = RiotClient(riot_api_key)
+        tracker = PlayerTracker(riot_client, config['players'])
+        
+        # Parse Args
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--one-shot", action="store_true", help="Run once and exit (for Cron/GitHub Actions)")
+        args = parser.parse_args()
+
+        # Initialize Bot
+        logging.info("Initializing Discord Bot...")
+        bot = LeagueDiscordBot(token=discord_token, channel_id=int(channel_id_str), tracker=tracker, one_shot=args.one_shot)
+        
+        # Run Bot
+        logging.info("Starting Bot execution...")
+        bot.run(discord_token)
+    except Exception as e:
+        logging.exception("CRITICAL ERROR DURING EXECUTION:")
+        raise e
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logging.critical("Unhandled exception in main:")
+        import traceback
+        traceback.print_exc()
+        import sys
+        sys.exit(1)
