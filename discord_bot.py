@@ -82,8 +82,14 @@ class LeagueDiscordBot(discord.Client):
             try:
                 # Run the check (Note: tracker is sync, but fast enough? Or wrap in executor?)
                 # For safety/best practice, wrap in executor
+            try:
+                # Run the check with a strict timeout of 45 seconds (Script runs every 120s locally or once on GH)
+                # On GH, we want it to die fast if stuck.
                 loop = asyncio.get_event_loop()
-                alerts = await loop.run_in_executor(None, self.tracker.check_new_matches)
+                alerts = await asyncio.wait_for(
+                    loop.run_in_executor(None, self.tracker.check_new_matches),
+                    timeout=60.0 # 60 seconds max
+                )
                 
                 for alert in alerts:
                     # Find participant info for the player
@@ -99,6 +105,8 @@ class LeagueDiscordBot(discord.Client):
                         else:
                             logging.error("Channel not available for sending alert.")
             
+            except asyncio.TimeoutError:
+                logging.error("Tracker check timed out! Skipping this cycle.")
             except Exception as e:
                 logging.error(f"Error in polling loop: {e}")
             

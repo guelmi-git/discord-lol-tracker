@@ -8,6 +8,7 @@ on:
 jobs:
   run-tracker:
     runs-on: ubuntu-latest
+    timeout-minutes: 5 # Force kill if stuck for more than 5 mins
     permissions:
       contents: write # Needed to commit state.json back
 
