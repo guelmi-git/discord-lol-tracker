@@ -1,0 +1,4 @@
+discord.py
+riotwatcher
+python-dotenv
+requests

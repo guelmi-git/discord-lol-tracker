@@ -1,0 +1,35 @@
+{
+    "riot_api_key": "RGAPI-ee7b90ff-462a-40c4-ad5a-33d876113d43",
+    "discord_bot_token": "MTQ1MzAzNTcyNzg1NTE1NzI3MA.Gz5Dow.Yr5C66GVY3QE6yRJaOK5EUx8INvYNrviwM89Ww",
+    "discord_channel_id": 1453036167317553182,
+    "players": [
+        {
+            "riot_id": "Guelmi#9595",
+            "puuid": ""
+        },
+        {
+            "riot_id": "Lolo Zouai#EUW",
+            "puuid": ""
+        },
+        {
+            "riot_id": "Lancinaa#7742",
+            "puuid": ""
+        },
+        {
+            "riot_id": "K Far#7532",
+            "puuid": ""
+        },
+        {
+            "riot_id": "Nihj#dxx",
+            "puuid": ""
+        },
+        {
+            "riot_id": "Testpilot1#9595",
+            "puuid": ""
+        },
+        {
+            "riot_id": "LePtitPoussey#EUW",
+            "puuid": ""
+        }
+    ]
+}
