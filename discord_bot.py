@@ -143,154 +143,136 @@ class LeagueDiscordBot(discord.Client):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._generate_leaderboard_image_sync, sorted_players)
 
-    def _generate_leaderboard_image_sync(self, sorted_players):
+    async def generate_player_card_async(self, player_data, rank_index):
+        """Generates a single player card in a non-blocking way."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._generate_player_card_sync, player_data, rank_index)
+
+    def _generate_player_card_sync(self, player_data, rank_index):
         from PIL import Image, ImageDraw, ImageFont
         import requests
         from io import BytesIO
 
-        # --- CONFIGURATION (GIANT MODE) ---
+        # Configuration
         WIDTH = 1200
-        HEADER_HEIGHT = 160
-        CARD_HEIGHT = 240 # Very tall cards
+        HEIGHT = 260
         PADDING = 30
-        GAP = 25
         
-        # Colors (High Contrast)
-        BG_COLOR = (5, 5, 10)     # Almost Black
-        CARD_BG = (30, 32, 45)    # Distinct Dark Blue-Grey
+        # Colors
+        BG_COLOR = (10, 12, 18)   # Transparent-ish or dark? Let's go dark block.
+        CARD_BG = (30, 32, 45)
         TEXT_WHITE = (255, 255, 255)
         TEXT_GRAY = (200, 200, 200)
         
-        # Accents
-        NEON_CYAN = (0, 255, 255)
+        # Rank Colors
         NEON_GOLD = (255, 215, 0)
         NEON_SILVER = (224, 224, 224)
         NEON_BRONZE = (205, 127, 50)
-        NEON_RED = (255, 80, 80)
+        NEON_DEFAULT = (60, 60, 80)
+        
         NEON_GREEN = (80, 255, 120)
-
-        total_height = HEADER_HEIGHT + (len(sorted_players) * (CARD_HEIGHT + GAP)) + PADDING
+        NEON_RED = (255, 80, 80)
 
         # Helper to load font
         def load_font(name, size):
             try:
-                # Orbitron for futuristic look
                 url = f"https://github.com/google/fonts/raw/main/ofl/orbitron/Orbitron-{name}.ttf"
                 r = requests.get(url, timeout=5)
                 return ImageFont.truetype(BytesIO(r.content), size)
             except:
                 return ImageFont.load_default()
 
-        # GIANT FONTS (For mobile readability)
-        font_header = load_font("Black", 90)
+        # Fonts
         font_rank_big = load_font("Bold", 80)
         font_name = load_font("Bold", 70) 
         font_stats = load_font("Regular", 45)
-        font_small = load_font("Regular", 30)
-
-        # Create Canvas
-        im = Image.new('RGBA', (WIDTH, total_height), BG_COLOR)
-        draw = ImageDraw.Draw(im)
-
-        # --- HEADER ---
-        # Draw a top neon bar
-        draw.rectangle((0, 0, WIDTH, 20), fill=NEON_CYAN)
         
-        # Title
-        title_text = "LEADERBOARD"
-        draw.text((WIDTH//2 + 5, HEADER_HEIGHT//2 + 5), title_text, font=font_header, fill=(0, 100, 100), anchor="mm")
-        draw.text((WIDTH//2, HEADER_HEIGHT//2), title_text, font=font_header, fill=NEON_CYAN, anchor="mm")
+        # Create Canvas (Single Card)
+        im = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0)) # Transparent background
+        draw = ImageDraw.Draw(im)
+        
+        # Border Color based on Rank
+        border_color = NEON_DEFAULT
+        if rank_index == 0: border_color = NEON_GOLD
+        elif rank_index == 1: border_color = NEON_SILVER
+        elif rank_index == 2: border_color = NEON_BRONZE
+        
+        # Draw Card Body (Full Width)
+        draw.rounded_rectangle((0, 0, WIDTH, HEIGHT), radius=30, fill=CARD_BG, outline=None)
+        
+        # Left Accent (Thicker)
+        draw.rounded_rectangle((0, 0, 40, HEIGHT), radius=30, fill=border_color, corners=(True, False, False, True))
 
-        # --- PLAYERS ---
-        for idx, p in enumerate(sorted_players):
-            y_start = HEADER_HEIGHT + (idx * (CARD_HEIGHT + GAP))
-            y_end = y_start + CARD_HEIGHT
-            
-            # 1. Card Background
-            border_color = (60, 60, 80) 
-            if idx == 0: border_color = NEON_GOLD
-            elif idx == 1: border_color = NEON_SILVER
-            elif idx == 2: border_color = NEON_BRONZE
-            
-            # Card Body
-            draw.rounded_rectangle((PADDING, y_start, WIDTH - PADDING, y_end), radius=30, fill=CARD_BG, outline=None)
-            
-            # Left Accent (Thicker)
-            draw.rounded_rectangle((PADDING, y_start, PADDING + 20, y_end), radius=30, fill=border_color, corners=(True, False, False, True))
+        # 1. Position Number
+        pos_text = f"#{rank_index + 1}"
+        draw.text((120, HEIGHT//2), pos_text, font=font_rank_big, fill=border_color, anchor="mm")
 
-            # 2. Position Number
-            pos_text = f"#{idx + 1}"
-            draw.text((PADDING + 80, y_start + CARD_HEIGHT//2), pos_text, font=font_rank_big, fill=border_color, anchor="mm")
+        rank_info = player_data.get('last_rank')
+        
+        # 2. Rank Icon (GIANT)
+        icon_x = 240
+        if rank_info and rank_info['tier'] in self.RANK_EMBLEMS:
+            try:
+                url = self.RANK_EMBLEMS[rank_info['tier']]
+                resp = requests.get(url, timeout=5)
+                icon = Image.open(BytesIO(resp.content)).convert("RGBA")
+                
+                if icon.getbbox(): icon = icon.crop(icon.getbbox())
+                
+                # 180px Icon
+                target_icon_h = 180
+                icon_final = icon.resize((target_icon_h, target_icon_h), Image.Resampling.LANCZOS)
+                
+                icon_y = (HEIGHT - target_icon_h) // 2
+                im.paste(icon_final, (icon_x, icon_y), icon_final)
+            except Exception as e:
+                logging.error(f"Failed to load rank icon: {e}")
+        
+        # 3. Player Name
+        name_x = icon_x + 220
+        draw.text((name_x, 80), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
+        
+        # 4. Rank Text
+        if rank_info:
+            tier_str = f"{rank_info['tier'].title()} {rank_info['rank']}"
+            lp_str = f"{rank_info['leaguePoints']} LP"
+            full_rank = f"{tier_str}  •  {lp_str}"
+            draw.text((name_x, 170), full_rank, font=font_stats, fill=border_color, anchor="lm")
+        else:
+            draw.text((name_x, 170), "Unranked", font=font_stats, fill=TEXT_GRAY, anchor="lm")
 
-            rank_data = p.get('last_rank')
+        # 5. Win/Loss Stats
+        if rank_info:
+            wins = rank_info.get('wins', 0)
+            losses = rank_info.get('losses', 0)
+            total = wins + losses
+            wr = (wins / total * 100) if total > 0 else 0
             
-            # 3. Rank Icon (GIANT)
-            icon_x = PADDING + 180
-            if rank_data and rank_data['tier'] in self.RANK_EMBLEMS:
-                try:
-                    url = self.RANK_EMBLEMS[rank_data['tier']]
-                    resp = requests.get(url, timeout=5)
-                    icon = Image.open(BytesIO(resp.content)).convert("RGBA")
-                    
-                    if icon.getbbox(): icon = icon.crop(icon.getbbox())
-                    
-                    # 180px Icon
-                    target_icon_h = 180
-                    icon_final = icon.resize((target_icon_h, target_icon_h), Image.Resampling.LANCZOS)
-                    
-                    icon_y = y_start + (CARD_HEIGHT - target_icon_h) // 2
-                    im.paste(icon_final, (icon_x, icon_y), icon_final)
-                except Exception as e:
-                    logging.error(f"Failed to load rank icon: {e}")
+            stats_x = WIDTH - PADDING - 40
             
-            # 4. Player Name
-            name_x = icon_x + 220
-            # Centered vertically broadly, but offset up
-            draw.text((name_x, y_start + 70), p['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
+            # WR %
+            draw.text((stats_x, 80), f"{wr:.1f}% WR", font=font_name, fill=TEXT_WHITE, anchor="rm")
             
-            # 5. Rank Text
-            if rank_data:
-                # "Emerald II • 50 LP"
-                tier_str = f"{rank_data['tier'].title()} {rank_data['rank']}"
-                lp_str = f"{rank_data['leaguePoints']} LP"
-                full_rank = f"{tier_str}  •  {lp_str}"
-                
-                draw.text((name_x, y_start + 150), full_rank, font=font_stats, fill=border_color, anchor="lm")
-            else:
-                draw.text((name_x, y_start + 150), "Unranked", font=font_stats, fill=TEXT_GRAY, anchor="lm")
-
-            # 6. Win/Loss Stats (Aligned Right)
-            if rank_data:
-                wins = rank_data.get('wins', 0)
-                losses = rank_data.get('losses', 0)
-                total = wins + losses
-                wr = (wins / total * 100) if total > 0 else 0
-                
-                stats_x = WIDTH - PADDING - 40
-                
-                # WR %
-                draw.text((stats_x, y_start + 70), f"{wr:.1f}% WR", font=font_name, fill=TEXT_WHITE, anchor="rm")
-                
-                # W/L
-                wl_str = f"{wins}W - {losses}L"
-                draw.text((stats_x, y_start + 140), wl_str, font=font_stats, fill=TEXT_GRAY, anchor="rm")
-                
-                # Glow Bar
-                bar_w = 250
-                bar_h = 12
-                bar_x = stats_x - bar_w
-                bar_y = y_start + 180
-                
-                draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), fill=(40, 40, 50))
-                fill_w = int(bar_w * (wr / 100))
-                color_bar = NEON_GREEN if wr >= 50 else NEON_RED
-                draw.rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h), fill=color_bar)
+            # W/L
+            wl_str = f"{wins}W - {losses}L"
+            draw.text((stats_x, 160), wl_str, font=font_stats, fill=TEXT_GRAY, anchor="rm")
+            
+            # Glow Bar
+            bar_w = 250
+            bar_h = 12
+            bar_x = stats_x - bar_w
+            bar_y = 200
+            
+            draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), fill=(40, 40, 50))
+            fill_w = int(bar_w * (wr / 100))
+            color_bar = NEON_GREEN if wr >= 50 else NEON_RED
+            draw.rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h), fill=color_bar)
 
         # Output
         b = BytesIO()
         im.save(b, format="PNG")
         b.seek(0)
-        return discord.File(b, filename="leaderboard_futuristic_v3.png")
+        return discord.File(b, filename=f"card_{rank_index}.png")
 
     async def update_leaderboard(self):
         """Updates the leaderboard channel with the current ranking."""
@@ -333,17 +315,23 @@ class LeagueDiscordBot(discord.Client):
 
         sorted_players = sorted(players_data, key=rank_key, reverse=True)
 
-        # 2. Generate Image
-        file = await self.generate_leaderboard_image_async(sorted_players)
-        
-        # 3. Clean & Send
+        # 2. Update Channel
         try:
-            await channel.purge(limit=10)
-            if file:
-                await channel.send(file=file)
-            else:
-                 await channel.send("Impossible de générer le classement (Erreur interne).")
-            logging.info("Leaderboard updated.")
+            await channel.purge(limit=20)
+            
+            # Send Header
+            await channel.send("## 🏆 CLASSEMENT SOLO/DUO DU SERVEUR\n*Mis à jour en temps réel*")
+            
+            # Send Card for each player
+            for idx, p in enumerate(sorted_players):
+                file = await self.generate_player_card_async(p, idx)
+                if file:
+                    await channel.send(file=file)
+                else:
+                    logging.error(f"Failed to generate card for {p['riot_id']}")
+
+            logging.info("Leaderboard updated with individual cards.")
+            
         except Exception as e:
             logging.error(f"Failed to update leaderboard: {e}") 
 
