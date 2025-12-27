@@ -138,6 +138,119 @@ class LeagueDiscordBot(discord.Client):
                 
             await asyncio.sleep(120) # 2 minutes
     
+    async def generate_leaderboard_image_async(self, sorted_players):
+        """Generates the leaderboard image in a non-blocking way."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._generate_leaderboard_image_sync, sorted_players)
+
+    def _generate_leaderboard_image_sync(self, sorted_players):
+        from PIL import Image, ImageDraw, ImageFont
+        import requests
+        from io import BytesIO
+
+        # Config dimensions
+        ROW_HEIGHT = 100
+        HEADER_HEIGHT = 80
+        WIDTH = 1000
+        PADDING = 20
+        total_height = HEADER_HEIGHT + (len(sorted_players) * ROW_HEIGHT) + PADDING
+
+        # Colors
+        BG_COLOR = (30, 31, 34) # Discord Dark
+        ROW_BG_EVEN = (43, 45, 49)
+        ROW_BG_ODD = (30, 31, 34)
+        TEXT_WHITE = (255, 255, 255)
+        TEXT_GOLD = (255, 215, 0)
+        ACCENT_COLOR = (88, 101, 242) # Blurple
+
+        # Load Font (Roboto)
+        try:
+            font_url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
+            resp = requests.get(font_url)
+            font_large = ImageFont.truetype(BytesIO(resp.content), 40)
+            font_medium = ImageFont.truetype(BytesIO(resp.content), 30)
+            font_small = ImageFont.truetype(BytesIO(resp.content), 24)
+        except:
+            font_large = ImageFont.load_default()
+            font_medium = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+
+        # Create Image
+        im = Image.new('RGBA', (WIDTH, total_height), BG_COLOR)
+        draw = ImageDraw.Draw(im)
+
+        # Header
+        draw.rectangle((0, 0, WIDTH, HEADER_HEIGHT), fill=ACCENT_COLOR)
+        draw.text((WIDTH//2, HEADER_HEIGHT//2), "CLASSEMENT SOLO/DUO", font=font_large, fill=TEXT_WHITE, anchor="mm")
+
+        # Rows
+        for idx, p in enumerate(sorted_players):
+            y_pos = HEADER_HEIGHT + (idx * ROW_HEIGHT)
+            
+            # Row Background
+            if idx % 2 == 0:
+                draw.rectangle((0, y_pos, WIDTH, y_pos + ROW_HEIGHT), fill=ROW_BG_EVEN)
+            else:
+                draw.rectangle((0, y_pos, WIDTH, y_pos + ROW_HEIGHT), fill=ROW_BG_ODD)
+
+            rank_data = p.get('last_rank')
+            
+            # 1. Position
+            pos_text = f"#{idx + 1}"
+            pos_color = TEXT_WHITE
+            if idx == 0: pos_color = TEXT_GOLD
+            if idx == 1: pos_color = (192, 192, 192) # Silver
+            if idx == 2: pos_color = (205, 127, 50) # Bronze
+            
+            draw.text((50, y_pos + ROW_HEIGHT//2), pos_text, font=font_large, fill=pos_color, anchor="mm")
+
+            # 2. Rank Icon
+            if rank_data and rank_data['tier'] in self.RANK_EMBLEMS:
+                url = self.RANK_EMBLEMS[rank_data['tier']]
+                try:
+                    icon_resp = requests.get(url)
+                    icon_img = Image.open(BytesIO(icon_resp.content)).convert("RGBA")
+                    # Crop transparency
+                    bbox = icon_img.getbbox()
+                    if bbox: icon_img = icon_img.crop(bbox)
+                    
+                    # Resize
+                    icon_size = 80
+                    icon_img = icon_img.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+                    im.paste(icon_img, (120, y_pos + 10), icon_img)
+                except:
+                    pass
+
+            # 3. Name
+            draw.text((250, y_pos + ROW_HEIGHT//2 - 15), p['riot_id'], font=font_medium, fill=TEXT_WHITE, anchor="lm")
+
+            # 4. Rank Text
+            if rank_data:
+                rank_str = f"{rank_data['tier'].title()} {rank_data['rank']} - {rank_data['leaguePoints']} LP"
+                draw.text((250, y_pos + ROW_HEIGHT//2 + 20), rank_str, font=font_small, fill=(200, 200, 200), anchor="lm")
+            else:
+                draw.text((250, y_pos + ROW_HEIGHT//2 + 20), "Unranked", font=font_small, fill=(200, 200, 200), anchor="lm")
+
+            # 5. Win/Loss Stats
+            if rank_data:
+                wins = rank_data.get('wins', 0)
+                losses = rank_data.get('losses', 0)
+                total = wins + losses
+                wr = (wins / total * 100) if total > 0 else 0
+                
+                stats_str = f"{wins}W / {losses}L"
+                wr_str = f"{wr:.1f}% WR"
+                
+                # Align right
+                draw.text((WIDTH - 50, y_pos + ROW_HEIGHT//2 - 15), stats_str, font=font_medium, fill=(100, 255, 100), anchor="rm")
+                draw.text((WIDTH - 50, y_pos + ROW_HEIGHT//2 + 20), wr_str, font=font_small, fill=(200, 200, 200), anchor="rm")
+
+        # Output
+        b = BytesIO()
+        im.save(b, format="PNG")
+        b.seek(0)
+        return discord.File(b, filename="leaderboard.png")
+
     async def update_leaderboard(self):
         """Updates the leaderboard channel with the current ranking."""
         leaderboard_channel_id = self.config.get("DISCORD_LEADERBOARD_CHANNEL_ID")
@@ -147,7 +260,6 @@ class LeagueDiscordBot(discord.Client):
         try:
             channel = self.get_channel(int(leaderboard_channel_id))
             if not channel:
-                # Try fetching if not in cache (sometimes happens on startup)
                 try:
                     channel = await self.fetch_channel(int(leaderboard_channel_id))
                 except Exception:
@@ -167,63 +279,29 @@ class LeagueDiscordBot(discord.Client):
             "GOLD": 2000, "SILVER": 1000, "BRONZE": 500, "IRON": 0,
             "UNRANKED": -1
         }
-        
-        ROMAN_VALUES = {"I": 4, "II": 3, "III": 2, "IV": 1} # Higher is better for sorting math (I > IV)
+        ROMAN_VALUES = {"I": 4, "II": 3, "III": 2, "IV": 1}
 
         def rank_key(p):
             rank_info = p.get('last_rank')
-            if not rank_info:
-                return -1
-            
+            if not rank_info: return -1
             tier_score = TIER_VALUES.get(rank_info['tier'], 0)
-            division_score = ROMAN_VALUES.get(rank_info['rank'], 0) * 100 # I=400, IV=100
+            division_score = ROMAN_VALUES.get(rank_info['rank'], 0) * 100
             lp = rank_info['leaguePoints']
-            
-            # Special case for Apex tiers (Master+) where only LP matters on top of tier
-            if tier_score >= 7000:
-                return tier_score + lp
-            
+            if tier_score >= 7000: return tier_score + lp
             return tier_score + division_score + lp
 
         sorted_players = sorted(players_data, key=rank_key, reverse=True)
 
-        # 2. Format Message
-        description_lines = []
-        medals = ["🥇", "🥈", "🥉"]
+        # 2. Generate Image
+        file = await self.generate_leaderboard_image_async(sorted_players)
         
-        for idx, p in enumerate(sorted_players):
-            rank_data = p.get('last_rank')
-            riot_id = p['riot_id']
-            
-            if idx < 3:
-                prefix = medals[idx]
-            else:
-                prefix = f"**{idx + 1}.**"
-            
-            if rank_data:
-                tier = rank_data['tier'].title() # "Platinum"
-                division = rank_data['rank']
-                lp = rank_data['leaguePoints']
-                
-                # Try to emulate user request: "Guelmi "Icon Platine" II 50 LP"
-                # We can try to use an emoji if valid, or just text.
-                # Assuming no custom emojis yet, let's stick to text for now but clean.
-                
-                line = f"{prefix} **{riot_id}** • {tier} {division} • **{lp} LP**"
-            else:
-                line = f"{prefix} **{riot_id}** • Unranked"
-            
-            description_lines.append(line)
-
-        embed = discord.Embed(title="🏆 CLASSEMENT DU SERVEUR", description="\n".join(description_lines), color=0xF1C40F)
-        embed.set_footer(text="Mis à jour en temps réel")
-
         # 3. Clean & Send
         try:
-            # Purge recent messages to keep channel clean (limit=10 should be enough)
-            # Check permissions first? Assuming bot has manage_messages
             await channel.purge(limit=10)
-            await channel.send(embed=embed)
+            if file:
+                await channel.send(file=file)
+            else:
+                 await channel.send("Impossible de générer le classement (Erreur interne).")
             logging.info("Leaderboard updated.")
         except Exception as e:
             logging.error(f"Failed to update leaderboard: {e}") 
