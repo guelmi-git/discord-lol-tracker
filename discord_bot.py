@@ -144,27 +144,63 @@ class LeagueDiscordBot(discord.Client):
         return await loop.run_in_executor(None, self._generate_leaderboard_image_sync, sorted_players)
 
     async def generate_player_card_async(self, player_data, rank_index):
+        """Generates card (Animated for Top 3, Static for others)."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._generate_player_card_sync, player_data, rank_index)
+        is_top_3 = rank_index < 3
+        
+        if is_top_3:
+            return await loop.run_in_executor(None, self._generate_animated_card_sync, player_data, rank_index)
+        else:
+            return await loop.run_in_executor(None, self._generate_static_card_sync, player_data, rank_index)
 
-    def _generate_player_card_sync(self, player_data, rank_index):
-        from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    def _generate_static_card_sync(self, player_data, rank_index):
+        from io import BytesIO
+        import discord
+        
+        im = self._render_card_frame(player_data, rank_index, frame_ratio=0.0)
+        
+        b = BytesIO()
+        im.save(b, format="PNG")
+        b.seek(0)
+        return discord.File(b, filename=f"card_{rank_index}.png")
+
+    def _generate_animated_card_sync(self, player_data, rank_index):
+        from io import BytesIO
+        import discord
+        
+        frames = []
+        TOTAL_FRAMES = 12 # Keep it low for file size
+        
+        for i in range(TOTAL_FRAMES):
+            ratio = i / TOTAL_FRAMES
+            frame = self._render_card_frame(player_data, rank_index, frame_ratio=ratio)
+            # Resize frame slightly to reduce GIF size? 1700 is huge for GIF.
+            # Let's resize output specific for GIF to 850w (Half) to enable smooth playback
+            frame_small = frame.resize((850, 160), Image.Resampling.LANCZOS)
+            frames.append(frame_small)
+            
+        b = BytesIO()
+        # Duration: duration of each frame in ms. 12 frames * 80ms ~= 1 sec loop
+        frames[0].save(b, format="GIF", save_all=True, append_images=frames[1:], duration=100, loop=0, optimize=True)
+        b.seek(0)
+        return discord.File(b, filename=f"card_{rank_index}.gif")
+
+    def _render_card_frame(self, player_data, rank_index, frame_ratio=0.0):
+        from PIL import Image, ImageDraw, ImageFont
         import requests
         from io import BytesIO
         import random
+        import math
 
         # Configuration (ULTIMATE WIDE)
         WIDTH = 1700 
         HEIGHT = 320
-        PADDING = 40
         
         # Colors
         BG_DARK = (5, 7, 12)
-        BG_LIGHT = (20, 25, 40)
         
         TEXT_WHITE = (255, 255, 255)
         TEXT_GRAY = (200, 200, 200)
-        TEXT_TEAL = (0, 255, 255)
         
         # Rank Colors
         NEON_GOLD = (255, 215, 0)
@@ -195,7 +231,7 @@ class LeagueDiscordBot(discord.Client):
         font_details = load_font("Bold", 35)
         font_wr = load_font("Bold", 50)       
         font_wl = load_font("Regular", 28) 
-        font_tiny = load_font("Regular", 15) # For deco text
+        font_tiny = load_font("Regular", 15) 
 
         # Create Canvas
         im = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
@@ -207,53 +243,60 @@ class LeagueDiscordBot(discord.Client):
         elif rank_index == 1: theme_color = NEON_SILVER
         elif rank_index == 2: theme_color = NEON_BRONZE
 
-        # --- A. COMPLEX BACKGROUND GENERATION ---
-        # 1. Gradient Fill (Left Dark -> Right Slightly Lighter)
-        # Note: PIL doesn't have native gradient fill, simulating with horizontal lines is slow?
-        # Let's just draw a base rect
+        # --- A. COMPLEX BACKGROUND ---
         draw.polygon([(40,0), (WIDTH,0), (WIDTH, HEIGHT-40), (WIDTH-40, HEIGHT), (0, HEIGHT), (0, 40)], fill=BG_DARK)
         
-        # 2. Hex Pattern Overlay
-        # Draw tech grid
+        # Animated Scanlines
+        # Move scanlines down based on frame_ratio
+        scan_offset = int(frame_ratio * 50) 
+        for y in range(0 - 50, HEIGHT + 50, 50): # Render extra to cover scrolling
+            draw_y = y + scan_offset
+            draw.line([(0, draw_y), (WIDTH, draw_y)], fill=(30, 40, 60, 50), width=1)
+        
+        # Tech Grid (Vertical static)
         for x in range(0, WIDTH, 50):
             draw.line([(x, 0), (x, HEIGHT)], fill=(30, 40, 60, 50), width=1)
-        for y in range(0, HEIGHT, 50):
-            draw.line([(0, y), (WIDTH, y)], fill=(30, 40, 60, 50), width=1)
             
-        # 3. Random Decorations (Data Noise)
+        # Random Decorations (Static for seeded random stability if needed, but pulsing alpha)
+        random.seed(rank_index) # Stable noise
         for _ in range(10):
             rx = random.randint(50, WIDTH-50)
             ry = random.randint(50, HEIGHT-50)
             rw = random.randint(10, 50)
             draw.rectangle((rx, ry, rx+rw, ry+2), fill=(theme_color[0], theme_color[1], theme_color[2], 100))
 
-        # --- B. SHAPE & BORDERS ---
+        # --- B. SHAPE & BORDERS (PULSING) ---
         CUT = 40
         points = [
             (CUT, 0), (WIDTH, 0), (WIDTH, HEIGHT - CUT), 
             (WIDTH - CUT, HEIGHT), (0, HEIGHT), (0, CUT)
         ]
         
-        # Main Glow Border (Multiple passes)
+        # Pulse Calculation (0.0 -> 1.0 -> 0.0)
+        # sin(0..Pi)
+        pulse = math.sin(frame_ratio * math.pi) 
+        base_alpha = 100
+        pulse_add = int(100 * pulse) # +0 to +100 alpha
+        
+        # Main Glow Border
         for w in [6, 4, 2]:
-            alpha = 50 + (20 * (6-w))
+            # Outer lines fade in/out
+            alpha = base_alpha + (pulse_add if w > 2 else 0)
             draw.polygon(points, outline=(theme_color[0], theme_color[1], theme_color[2], alpha), width=w)
 
-        # Thick Brackets
+        # Thick Brackets (Solid)
         draw.line([(CUT-5, 0), (CUT+150, 0)], fill=theme_color, width=6)
         draw.line([(0, CUT-5), (0, CUT+150)], fill=theme_color, width=6)
-        draw.line([(0, CUT), (CUT, 0)], fill=theme_color, width=6) # Corner
+        draw.line([(0, CUT), (CUT, 0)], fill=theme_color, width=6)
 
         draw.line([(WIDTH-CUT+5, HEIGHT), (WIDTH-CUT-150, HEIGHT)], fill=theme_color, width=6)
         draw.line([(WIDTH, HEIGHT-CUT+5), (WIDTH, HEIGHT-CUT-150)], fill=theme_color, width=6)
-        draw.line([(WIDTH, HEIGHT-CUT), (WIDTH-CUT, HEIGHT)], fill=theme_color, width=6) # Corner
+        draw.line([(WIDTH, HEIGHT-CUT), (WIDTH-CUT, HEIGHT)], fill=theme_color, width=6)
 
-        # --- C. RANK SECTION (LEFT) ---
-        # Background for Rank #
+        # --- C. RANK SECTION ---
         poly_bg = [(CUT, 0), (220, 0), (260, HEIGHT), (0, HEIGHT), (0, CUT)]
         draw.polygon(poly_bg, fill=(theme_color[0], theme_color[1], theme_color[2], 20))
         
-        # Rank Value
         draw.text((120, HEIGHT//2), f"#{rank_index + 1}", font=font_rank_big, fill=theme_color, anchor="mm")
         draw.text((120, HEIGHT-30), "RANKING", font=font_tiny, fill=theme_color, anchor="mm")
 
@@ -261,52 +304,52 @@ class LeagueDiscordBot(discord.Client):
         rank_info = player_data.get('last_rank')
         icon_x = 320
         
-        # Holographic Floor (Ellipse)
+        # Holographic Floor (Pulse Size/Alpha)
+        holo_alpha = 50 + int(100 * pulse)
         holo_rect = [icon_x, HEIGHT-60, icon_x+180, HEIGHT-40]
-        draw.ellipse(holo_rect, fill=(theme_color[0], theme_color[1], theme_color[2], 100))
+        draw.ellipse(holo_rect, fill=(theme_color[0], theme_color[1], theme_color[2], holo_alpha))
         draw.ellipse(holo_rect, outline=theme_color, width=2)
         
         if rank_info and rank_info['tier'] in self.RANK_EMBLEMS:
             try:
                 url = self.RANK_EMBLEMS[rank_info['tier']]
-                resp = requests.get(url, timeout=3)
-                icon = Image.open(BytesIO(resp.content)).convert("RGBA")
-                if icon.getbbox(): icon = icon.crop(icon.getbbox())
+                if not hasattr(self, '_icon_cache'): self._icon_cache = {}
+                cache_key = rank_info['tier']
                 
-                target_h = 200
-                icon = icon.resize((target_h, target_h), Image.Resampling.LANCZOS)
+                if cache_key in self._icon_cache:
+                    icon = self._icon_cache[cache_key]
+                else:
+                    resp = requests.get(url, timeout=3)
+                    icon = Image.open(BytesIO(resp.content)).convert("RGBA")
+                    if icon.getbbox(): icon = icon.crop(icon.getbbox())
+                    icon = icon.resize((200, 200), Image.Resampling.LANCZOS)
+                    self._icon_cache[cache_key] = icon
                 
-                # Center horizontally on the holo floor
-                # Floor center x = icon_x + 90
-                final_x = (icon_x + 90) - (target_h // 2)
-                final_y = (HEIGHT - target_h) // 2 - 10 # Slightly up
+                # Bobbing effect (Float up/down)
+                bob_offset = int(5 * math.sin(frame_ratio * 2 * math.pi))
+                
+                final_x = (icon_x + 90) - (200 // 2)
+                final_y = (HEIGHT - 200) // 2 - 10 + bob_offset
                 
                 im.paste(icon, (final_x, final_y), icon)
             except: pass
 
         # --- E. INFO & STATS ---
         name_x = icon_x + 220
-        
-        # Decorative Label above Name
         draw.text((name_x, 50), f"// SUMMONER_ID: {player_data['riot_id']}", font=font_tiny, fill=theme_color, anchor="lm")
-        
-        # Name
         draw.text((name_x, 100), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
         
-        # Rank Details (Glass Panel)
         if rank_info:
             detail_text = f"{rank_info['tier']} {rank_info['rank']} // {rank_info['leaguePoints']} LP"
         else:
             detail_text = "UNRANKED"
             
-        # Draw background pill for details
         txt_bbox = draw.textbbox((name_x, 170), detail_text, font=font_details)
         pill_rect = (name_x - 10, 150, txt_bbox[2] + 20, 190)
         draw.rounded_rectangle(pill_rect, radius=10, fill=(255, 255, 255, 20), outline=None)
-        
         draw.text((name_x, 170), detail_text, font=font_details, fill=theme_color, anchor="lm")
 
-        # --- F. WINRATE HUD (RIGHT) ---
+        # --- F. WINRATE HUD ---
         stats_x = WIDTH - 80
         if rank_info:
             wins = rank_info.get('wins', 0)
@@ -314,42 +357,33 @@ class LeagueDiscordBot(discord.Client):
             total = wins + losses
             wr = (wins / total * 100) if total > 0 else 0
             
-            # Big Percentage
             draw.text((stats_x, 100), f"{wr:.1f}%", font=font_name, fill=TEXT_WHITE, anchor="rm")
             draw.text((stats_x, 60), "WINRATE_CALC", font=font_tiny, fill=TEXT_GRAY, anchor="rm")
-            
-            # W/L Small
             draw.text((stats_x, 150), f"{wins}W / {losses}L", font=font_wl, fill=TEXT_GRAY, anchor="rm")
             
-            # Segmented Bar
             bar_w = 350
             bar_h = 10
             bar_x = stats_x - bar_w
             bar_y = 210
             
-            # Label
             draw.text((bar_x, bar_y - 20), "PERFORMANCE_METRICS", font=font_tiny, fill=theme_color, anchor="lm")
             
             color_bar = NEON_GREEN if wr >= 50 else NEON_RED
             fill_w = int(bar_w * (wr / 100))
             
-            # Draw empty segments
             seg_w = 8
             gap = 3
             for i in range(bar_w // (seg_w + gap)):
                 x = bar_x + i * (seg_w + gap)
                 rect = [x, bar_y, x+seg_w, bar_y+bar_h]
                 
+                # Active segments pulse slightly
                 if x < bar_x + fill_w:
                     draw.rectangle(rect, fill=color_bar)
                 else:
                     draw.rectangle(rect, fill=(40, 40, 50))
 
-        # Output
-        b = BytesIO()
-        im.save(b, format="PNG")
-        b.seek(0)
-        return discord.File(b, filename=f"card_{rank_index}.png")
+        return im
 
     async def update_leaderboard(self):
         """Updates the leaderboard channel with the current ranking."""
