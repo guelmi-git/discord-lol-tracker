@@ -167,6 +167,7 @@ class LeagueDiscordBot(discord.Client):
     def _generate_animated_card_sync(self, player_data, rank_index):
         from io import BytesIO
         import discord
+        from PIL import Image  # Fix: Import Image locally
         
         frames = []
         TOTAL_FRAMES = 12 # Keep it low for file size
