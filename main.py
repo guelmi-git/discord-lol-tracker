@@ -74,7 +74,7 @@ def main():
 
         # Initialize Bot
         logging.info("Initializing Discord Bot...")
-        bot = LeagueDiscordBot(token=discord_token, channel_id=int(channel_id_str), tracker=tracker, one_shot=args.one_shot)
+        bot = LeagueDiscordBot(token=discord_token, channel_id=int(channel_id_str), tracker=tracker, one_shot=args.one_shot, config=config)
         
         # Run Bot
         logging.info("Starting Bot execution...")

@@ -35,13 +35,14 @@ class LeagueDiscordBot(discord.Client):
         "Reprends-toi ou désinstalle le jeu. 🚮"
     ]
 
-    def __init__(self, token, channel_id, tracker, one_shot=False):
+    def __init__(self, token, channel_id, tracker, one_shot=False, config=None):
         intents = discord.Intents.default()
         super().__init__(intents=intents)
         self.token = token
         self.channel_id = int(channel_id)
         self.tracker = tracker
         self.one_shot = one_shot
+        self.config = config or {}
         
         # Load Roasts
         try:
