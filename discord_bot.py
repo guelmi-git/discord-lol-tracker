@@ -153,10 +153,10 @@ class LeagueDiscordBot(discord.Client):
         import requests
         from io import BytesIO
 
-        # Configuration (MASSIVE)
-        WIDTH = 1400 
+        # Configuration (WIDE MODE)
+        WIDTH = 1700 
         HEIGHT = 320
-        PADDING = 30
+        PADDING = 40
         
         # Colors
         BG_COLOR = (10, 12, 18)
@@ -168,7 +168,7 @@ class LeagueDiscordBot(discord.Client):
         NEON_GOLD = (255, 215, 0)
         NEON_SILVER = (224, 224, 224)
         NEON_BRONZE = (205, 127, 50)
-        NEON_DEFAULT = (130, 130, 150) # Brighter Steel Grey for visibility
+        NEON_DEFAULT = (130, 130, 150) # Brighter Steel Grey
         
         NEON_GREEN = (80, 255, 120)
         NEON_RED = (255, 80, 80)
@@ -184,7 +184,6 @@ class LeagueDiscordBot(discord.Client):
                 r = requests.get(url, timeout=5)
                 if r.status_code == 200:
                     font = ImageFont.truetype(BytesIO(r.content), size)
-                    # logging.info(f"Loaded Orbitron from Web for {name}") 
                     return font
             except Exception as e:
                 logging.warning(f"Failed to download Orbitron: {e}")
@@ -200,7 +199,6 @@ class LeagueDiscordBot(discord.Client):
                 if os.path.exists(f_path):
                     try:
                         font = ImageFont.truetype(f_path, size)
-                        # logging.info(f"Loaded System Font: {f_path}")
                         return font
                     except:
                         pass
@@ -211,16 +209,15 @@ class LeagueDiscordBot(discord.Client):
             except:
                 pass
             
-            # 4. Total Failure -> Default Bitmap (Tiny)
             logging.error(f"CRITICAL: Could not load ANY font for {name}. Using tiny default.")
             return ImageFont.load_default()
 
-        # Fonts - FINAL ADJUSTMENT
-        font_rank_big = load_font("Bold", 75) # #1
-        font_name = load_font("Black", 60)    # NAME
-        font_details = load_font("Regular", 35) # Emerald II...
-        font_wr = load_font("Bold", 50)       # 55% WR
-        font_wl = load_font("Regular", 30)    # 100W - 50L
+        # Fonts - WIDE & SLEEK
+        font_rank_big = load_font("Bold", 65)  # #1
+        font_name = load_font("Black", 55)     # NAME (Smaller to fit)
+        font_details = load_font("Regular", 30) # Emerald II...
+        font_wr = load_font("Bold", 45)        # 55% WR (Subtle)
+        font_wl = load_font("Regular", 25)     # 100W - 50L
         
         # Create Canvas (Single Card)
         im = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
@@ -254,8 +251,8 @@ class LeagueDiscordBot(discord.Client):
                 
                 if icon.getbbox(): icon = icon.crop(icon.getbbox())
                 
-                # 200px Icon (Slightly smaller)
-                target_icon_h = 200
+                # 190px Icon
+                target_icon_h = 190
                 icon_final = icon.resize((target_icon_h, target_icon_h), Image.Resampling.LANCZOS)
                 
                 icon_y = (HEIGHT - target_icon_h) // 2
@@ -265,16 +262,16 @@ class LeagueDiscordBot(discord.Client):
         
         # 3. Player Name
         name_x = icon_x + 240
-        draw.text((name_x, 110), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
+        draw.text((name_x, 115), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
         
         # 4. Rank Text
         if rank_info:
             tier_str = f"{rank_info['tier'].title()} {rank_info['rank']}"
             lp_str = f"{rank_info['leaguePoints']} LP"
             full_rank = f"{tier_str}  •  {lp_str}"
-            draw.text((name_x, 190), full_rank, font=font_details, fill=border_color, anchor="lm")
+            draw.text((name_x, 185), full_rank, font=font_details, fill=border_color, anchor="lm")
         else:
-            draw.text((name_x, 190), "Unranked", font=font_details, fill=TEXT_GRAY, anchor="lm")
+            draw.text((name_x, 185), "Unranked", font=font_details, fill=TEXT_GRAY, anchor="lm")
 
         # 5. Win/Loss Stats
         if rank_info:
@@ -283,20 +280,20 @@ class LeagueDiscordBot(discord.Client):
             total = wins + losses
             wr = (wins / total * 100) if total > 0 else 0
             
-            stats_x = WIDTH - PADDING - 40
+            stats_x = WIDTH - PADDING - 60
             
             # WR %
-            draw.text((stats_x, 90), f"{wr:.1f}% WR", font=font_wr, fill=TEXT_WHITE, anchor="rm")
+            draw.text((stats_x, 100), f"{wr:.1f}% WR", font=font_wr, fill=TEXT_WHITE, anchor="rm")
             
             # W/L
             wl_str = f"{wins}W - {losses}L"
-            draw.text((stats_x, 170), wl_str, font=font_wl, fill=TEXT_GRAY, anchor="rm")
+            draw.text((stats_x, 160), wl_str, font=font_wl, fill=TEXT_GRAY, anchor="rm")
             
             # Glow Bar
-            bar_w = 300
-            bar_h = 16
+            bar_w = 250
+            bar_h = 10
             bar_x = stats_x - bar_w
-            bar_y = 230
+            bar_y = 210
             
             draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), fill=(40, 40, 50))
             fill_w = int(bar_w * (wr / 100))
