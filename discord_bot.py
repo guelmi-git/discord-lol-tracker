@@ -618,13 +618,26 @@ class LeagueDiscordBot(discord.Client):
             source_dict = self.CHAMPION_ROASTS
             
         if source_dict:
-            # Try specific champion
-            cham_key = champion_name
-            if cham_key not in source_dict:
-                 cham_key = champion_name.replace(" ", "")
+            # Helper to normalize names (lowercased, only alphanumeric)
+            def normalize(s):
+                return "".join(c.lower() for c in s if c.isalnum())
             
-            if cham_key in source_dict and source_dict[cham_key]:
-                flavor_text = random.choice(source_dict[cham_key])
+            target_norm = normalize(champion_name)
+            found_key = None
+            
+            # 1. Try direct exact match first (Fast)
+            if champion_name in source_dict:
+                found_key = champion_name
+            else:
+                # 2. Search for normalized match (Robust)
+                # This handles Kai'Sa -> kaisa == KaiSa -> kaisa
+                for key in source_dict.keys():
+                    if normalize(key) == target_norm:
+                        found_key = key
+                        break
+            
+            if found_key and source_dict[found_key]:
+                flavor_text = random.choice(source_dict[found_key])
             else:
                 # Fallback: Pick a random phrase from ANY champion 
                 all_keys = list(source_dict.keys())
