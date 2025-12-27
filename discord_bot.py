@@ -609,38 +609,29 @@ class LeagueDiscordBot(discord.Client):
         champion_name = participant_info['championName']
         title = f"{'🏆' if win else '💀'} {outcome} as {champion_name}"
 
-        # Flavor Text
+        # Flavor Text (Exclusive JSON Logic)
+        flavor_text = outcome # Fallback
+        
         if win:
-            # Contextual Praise Logic
-            generic_praise = random.choice(self.VICTORY_MESSAGES)
-            specific_praise = None
-            
-            cham_key = champion_name
-            if cham_key not in self.CHAMPION_PRAISES:
-                 cham_key = champion_name.replace(" ", "")
-            
-            if cham_key in self.CHAMPION_PRAISES:
-                specific_praise = random.choice(self.CHAMPION_PRAISES[cham_key])
-            
-            if specific_praise:
-                flavor_text = random.choice([generic_praise, specific_praise])
-            else:
-                flavor_text = generic_praise
+            source_dict = self.CHAMPION_PRAISES
         else:
-            # Contextual Roast Logic:
-            generic_roast = random.choice(self.DEFEAT_MESSAGES)
-            specific_roast = None
+            source_dict = self.CHAMPION_ROASTS
+            
+        if source_dict:
+            # Try specific champion
             cham_key = champion_name
-            if cham_key not in self.CHAMPION_ROASTS:
+            if cham_key not in source_dict:
                  cham_key = champion_name.replace(" ", "")
             
-            if cham_key in self.CHAMPION_ROASTS:
-                specific_roast = random.choice(self.CHAMPION_ROASTS[cham_key])
-            
-            if specific_roast:
-                flavor_text = random.choice([generic_roast, specific_roast])
+            if cham_key in source_dict and source_dict[cham_key]:
+                flavor_text = random.choice(source_dict[cham_key])
             else:
-                flavor_text = generic_roast
+                # Fallback: Pick a random phrase from ANY champion 
+                all_keys = list(source_dict.keys())
+                if all_keys:
+                    random_champ = random.choice(all_keys)
+                    if source_dict[random_champ]:
+                        flavor_text = random.choice(source_dict[random_champ])
 
         embed = discord.Embed(title=title, description=f"*{flavor_text}*", color=color)
         
