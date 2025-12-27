@@ -281,6 +281,7 @@ class LeagueDiscordBot(discord.Client):
         
         TEXT_WHITE = (255, 255, 255)
         TEXT_YELLOW = (255, 240, 100) # Super Saiyan Yellow
+        TEXT_GRAY = (200, 200, 200)
         
         # Rank Colors (Bright/Magical)
         NEON_GOLD = (255, 220, 0)
