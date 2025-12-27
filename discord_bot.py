@@ -19,21 +19,7 @@ class LeagueDiscordBot(discord.Client):
         "CHALLENGER": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-challenger.png"
     }
 
-    VICTORY_MESSAGES = [
-        "Bien joué GOAT, continue comme ça !",
-        "Trop facile pour toi, monte le niveau !",
-        "LE ROI EST DANS LA PLACE 👑",
-        "Masterclass, rien à dire.",
-        "C'est ça qu'on veut voir ! 🚀"
-    ]
-
-    DEFEAT_MESSAGES = [
-        "Allez concentre toi un peu, ça devient gênant un niveau si pitoyable...",
-        "FF 15 la prochaine fois ?",
-        "C'est pas possible de jouer comme ça...",
-        "Ton équipe te déteste, sache-le.",
-        "Reprends-toi ou désinstalle le jeu. 🚮"
-    ]
+    # Removed hardcoded VICTORY/DEFEAT messages as per user request to use only JSON files.
 
     def __init__(self, token, channel_id, tracker, one_shot=False, config=None):
         intents = discord.Intents.default()
