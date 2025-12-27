@@ -168,7 +168,7 @@ class LeagueDiscordBot(discord.Client):
         NEON_GOLD = (255, 215, 0)
         NEON_SILVER = (224, 224, 224)
         NEON_BRONZE = (205, 127, 50)
-        NEON_DEFAULT = (60, 60, 80)
+        NEON_DEFAULT = (130, 130, 150) # Brighter Steel Grey for visibility
         
         NEON_GREEN = (80, 255, 120)
         NEON_RED = (255, 80, 80)
@@ -200,7 +200,7 @@ class LeagueDiscordBot(discord.Client):
                 if os.path.exists(f_path):
                     try:
                         font = ImageFont.truetype(f_path, size)
-                        logging.info(f"Loaded System Font: {f_path}")
+                        # logging.info(f"Loaded System Font: {f_path}")
                         return font
                     except:
                         pass
@@ -215,12 +215,12 @@ class LeagueDiscordBot(discord.Client):
             logging.error(f"CRITICAL: Could not load ANY font for {name}. Using tiny default.")
             return ImageFont.load_default()
 
-        # Fonts - BALANCED GIANT
-        font_rank_big = load_font("Bold", 85) # #1
-        font_name = load_font("Black", 65)    # NAME
-        font_details = load_font("Regular", 40) # Emerald II...
-        font_wr = load_font("Bold", 55)       # 55% WR
-        font_wl = load_font("Regular", 35)    # 100W - 50L
+        # Fonts - FINAL ADJUSTMENT
+        font_rank_big = load_font("Bold", 75) # #1
+        font_name = load_font("Black", 60)    # NAME
+        font_details = load_font("Regular", 35) # Emerald II...
+        font_wr = load_font("Bold", 50)       # 55% WR
+        font_wl = load_font("Regular", 30)    # 100W - 50L
         
         # Create Canvas (Single Card)
         im = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
@@ -244,7 +244,7 @@ class LeagueDiscordBot(discord.Client):
 
         rank_info = player_data.get('last_rank')
         
-        # 2. Rank Icon (GIANT)
+        # 2. Rank Icon
         icon_x = 280
         if rank_info and rank_info['tier'] in self.RANK_EMBLEMS:
             try:
@@ -254,8 +254,8 @@ class LeagueDiscordBot(discord.Client):
                 
                 if icon.getbbox(): icon = icon.crop(icon.getbbox())
                 
-                # 220px Icon
-                target_icon_h = 220
+                # 200px Icon (Slightly smaller)
+                target_icon_h = 200
                 icon_final = icon.resize((target_icon_h, target_icon_h), Image.Resampling.LANCZOS)
                 
                 icon_y = (HEIGHT - target_icon_h) // 2
@@ -264,10 +264,8 @@ class LeagueDiscordBot(discord.Client):
                 logging.error(f"Failed to load rank icon: {e}")
         
         # 3. Player Name
-        name_x = icon_x + 250
-        # Prevent overlap with stats by truncating length if needed? 
-        # For now just move Y up slightly
-        draw.text((name_x, 100), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
+        name_x = icon_x + 240
+        draw.text((name_x, 110), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
         
         # 4. Rank Text
         if rank_info:
@@ -288,17 +286,17 @@ class LeagueDiscordBot(discord.Client):
             stats_x = WIDTH - PADDING - 40
             
             # WR %
-            draw.text((stats_x, 80), f"{wr:.1f}% WR", font=font_wr, fill=TEXT_WHITE, anchor="rm")
+            draw.text((stats_x, 90), f"{wr:.1f}% WR", font=font_wr, fill=TEXT_WHITE, anchor="rm")
             
             # W/L
             wl_str = f"{wins}W - {losses}L"
-            draw.text((stats_x, 160), wl_str, font=font_wl, fill=TEXT_GRAY, anchor="rm")
+            draw.text((stats_x, 170), wl_str, font=font_wl, fill=TEXT_GRAY, anchor="rm")
             
             # Glow Bar
             bar_w = 300
             bar_h = 16
             bar_x = stats_x - bar_w
-            bar_y = 220
+            bar_y = 230
             
             draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), fill=(40, 40, 50))
             fill_w = int(bar_w * (wr / 100))
