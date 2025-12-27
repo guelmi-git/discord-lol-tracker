@@ -173,19 +173,18 @@ class LeagueDiscordBot(discord.Client):
         # 1. Generate Base Image (Expensive operation, do once)
         base_im = self._render_base_card(player_data, rank_index)
         
-        # 2. Setup Snake Path (Chamfered Rect)
+        # 2. Setup Snake Path (Rectangular)
         WIDTH = 1700
         HEIGHT = 320
-        CUT = 40
+        # CUT = 0, Simple Rectangle path
         
-        # Coordinates of the polygon corners
+        # Coordinates of the polygon corners (TopLeft -> TopRight -> BottomRight -> BottomLeft)
         path_nodes = [
-            (0, CUT), (CUT, 0),             # Chamfer Top-Left
+            (0, 0),                         # Top-Left
             (WIDTH, 0),                     # Top-Right
-            (WIDTH, HEIGHT - CUT),          # Chamfer Bottom-Right Start
-            (WIDTH - CUT, HEIGHT),          # Chamfer Bottom-Right End
+            (WIDTH, HEIGHT),                # Bottom-Right
             (0, HEIGHT),                    # Bottom-Left
-            (0, CUT)                        # Loop back to start
+            (0, 0)                          # Loop back to start
         ]
         
         # Calculate total path length and segments
@@ -271,6 +270,7 @@ class LeagueDiscordBot(discord.Client):
         import random
         import discord
         import math
+        import os
 
         # Configuration (ANIME STYLE)
         WIDTH = 1700 
@@ -328,50 +328,48 @@ class LeagueDiscordBot(discord.Client):
         elif rank_index == 1: theme_color = NEON_SILVER
         elif rank_index == 2: theme_color = NEON_BRONZE
 
-        # --- A. ANIME BACKGROUND (ENERGY BURST) ---
-        # 1. Base Gradient
-        draw.rectangle((0,0, WIDTH, HEIGHT), fill=BG_DARK)
+        # --- A. BACKGROUND (HIGH-END ASSETS) ---
+        # Determining Background Asset
+        bg_filename = "bg_bronze.png" # Default
+        if rank_index == 0: bg_filename = "bg_gold.png"
+        elif rank_index == 1: bg_filename = "bg_silver.png"
         
-        # 2. Radial Speed Lines (Burst from Icon Position)
-        # Center of burst = Left side (Icon)
-        burst_x, burst_y = 300, HEIGHT // 2
+        asset_path = f"assets/{bg_filename}"
+        bg_loaded = False
         
-        for i in range(0, 360, 5): # Every 5 degrees
-            angle = math.radians(i)
-            # Ray length
-            r_start = random.randint(100, 200)
-            r_end = WIDTH + 500
-            
-            x1 = burst_x + r_start * math.cos(angle)
-            y1 = burst_y + r_start * math.sin(angle)
-            x2 = burst_x + r_end * math.cos(angle)
-            y2 = burst_y + r_end * math.sin(angle)
-            
-            # Random width and alpha for energy feel
-            width = random.randint(1, 4)
-            alpha = random.randint(10, 50)
-            color = (theme_color[0], theme_color[1], theme_color[2], alpha)
-            
-            draw.line([(x1, y1), (x2, y2)], fill=color, width=width)
+        try:
+            # Try loading local asset
+            if os.path.exists(asset_path):
+                bg_img = Image.open(asset_path).convert("RGBA")
+                bg_img = bg_img.resize((WIDTH, HEIGHT), Image.Resampling.LANCZOS)
+                im.paste(bg_img, (0, 0))
+                bg_loaded = True
+        except Exception as e:
+            print(f"Error loading background {asset_path}: {e}")
+
+        if not bg_loaded:
+            # Fallback: Draw Gradient if asset missing
+            draw.rectangle((0,0, WIDTH, HEIGHT), fill=BG_DARK)
+            # Simple burst fallback
+            burst_x, burst_y = 300, HEIGHT // 2
+            for i in range(0, 360, 5): 
+                angle = math.radians(i)
+                x2 = burst_x + (WIDTH+500) * math.cos(angle)
+                y2 = burst_y + (WIDTH+500) * math.sin(angle)
+                draw.line([(burst_x, burst_y), (x2, y2)], fill=(theme_color[0], theme_color[1], theme_color[2], 20), width=2)
 
         # --- B. SHAPE (Simple Rect with magical border) ---
         # No more chamfer, just clean box with thick borders
-        # Or keep chamfer if it fits "Mecha Anime"? Let's keep chamfer, it is cool.
-        CUT = 40
-        points = [
-            (CUT, 0), (WIDTH, 0), (WIDTH, HEIGHT - CUT), 
-            (WIDTH - CUT, HEIGHT), (0, HEIGHT), (0, CUT)
-        ]
+        CUT = 0 # No cut for full art background, just a frame
+        points = [(0,0), (WIDTH,0), (WIDTH,HEIGHT), (0,HEIGHT)]
         
-        # Magical Aura Glow (Soft)
-        # We can't do gaussian blur easily on polygon without creating mask, skipping for perf.
-        # Draw multiple semi-transparent borders
-        for w in [15, 10, 5]:
-            alpha = 20 + (10 * (15-w))
-            draw.polygon(points, outline=(theme_color[0], theme_color[1], theme_color[2], alpha), width=w)
+        # Magical Aura Glow (Soft) - Only if using Fallback, or overlay on image?
+        # Let's add a subtle inner glow frame
+        for w in [10, 5]:
+            draw.rectangle((0,0,WIDTH,HEIGHT), outline=(theme_color[0], theme_color[1], theme_color[2], 50), width=w)
             
         # Hard Border
-        draw.polygon(points, outline=theme_color, width=3)
+        draw.rectangle((0,0,WIDTH-1,HEIGHT-1), outline=theme_color, width=3)
 
         # --- C. RANK ICON & AURA ---
         icon_x = 300
