@@ -144,11 +144,127 @@ class LeagueDiscordBot(discord.Client):
         return await loop.run_in_executor(None, self._generate_leaderboard_image_sync, sorted_players)
 
     async def generate_player_card_async(self, player_data, rank_index):
-        """Generates a high-quality static player card."""
+        """Generates card (Snake Animation for Top 3, Static for others)."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._generate_player_card_sync, player_data, rank_index)
+        is_top_3 = rank_index < 3
+        
+        if is_top_3:
+            return await loop.run_in_executor(None, self._generate_snake_animated_card_sync, player_data, rank_index)
+        else:
+            return await loop.run_in_executor(None, self._generate_static_card_sync, player_data, rank_index)
 
-    def _generate_player_card_sync(self, player_data, rank_index):
+    def _generate_static_card_sync(self, player_data, rank_index):
+        from io import BytesIO
+        import discord
+        
+        im = self._render_base_card(player_data, rank_index)
+        
+        b = BytesIO()
+        im.save(b, format="PNG")
+        b.seek(0)
+        return discord.File(b, filename=f"card_{rank_index}.png")
+
+    def _generate_snake_animated_card_sync(self, player_data, rank_index):
+        from io import BytesIO
+        import discord
+        from PIL import Image, ImageDraw
+        import math
+        
+        # 1. Generate Base Image (Expensive operation, do once)
+        base_im = self._render_base_card(player_data, rank_index)
+        
+        # 2. Setup Snake Path (Chamfered Rect)
+        WIDTH = 1700
+        HEIGHT = 320
+        CUT = 40
+        
+        # Coordinates of the polygon corners
+        path_nodes = [
+            (0, CUT), (CUT, 0),             # Chamfer Top-Left
+            (WIDTH, 0),                     # Top-Right
+            (WIDTH, HEIGHT - CUT),          # Chamfer Bottom-Right Start
+            (WIDTH - CUT, HEIGHT),          # Chamfer Bottom-Right End
+            (0, HEIGHT),                    # Bottom-Left
+            (0, CUT)                        # Loop back to start
+        ]
+        
+        # Calculate total path length and segments
+        total_length = 0
+        segments = []
+        for i in range(len(path_nodes)):
+            p1 = path_nodes[i]
+            p2 = path_nodes[(i + 1) % len(path_nodes)]
+            dist = math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)
+            segments.append({
+                'start': p1, 'end': p2, 'len': dist, 'cum_start': total_length
+            })
+            total_length += dist
+
+        # Helper: Get X,Y at distance D along path
+        def get_point_at_dist(d):
+            d = d % total_length # Wrap around
+            for seg in segments:
+                if d >= seg['cum_start'] and d <= seg['cum_start'] + seg['len']:
+                    local_d = d - seg['cum_start']
+                    if seg['len'] == 0: return seg['start']
+                    ratio = local_d / seg['len']
+                    x = seg['start'][0] + (seg['end'][0] - seg['start'][0]) * ratio
+                    y = seg['start'][1] + (seg['end'][1] - seg['start'][1]) * ratio
+                    return (x, y)
+            return path_nodes[0]
+
+        # 3. Render Frames
+        frames = []
+        TOTAL_FRAMES = 24 # Smooth loop
+        SNAKE_LEN = 500   # Length of the neon tail
+        
+        # Determine Color
+        NEON_GOLD = (255, 215, 0)
+        NEON_SILVER = (220, 220, 255)
+        NEON_BRONZE = (205, 127, 50)
+        
+        snake_color = NEON_GOLD
+        if rank_index == 1: snake_color = NEON_SILVER
+        elif rank_index == 2: snake_color = NEON_BRONZE
+        
+        for i in range(TOTAL_FRAMES):
+            frame = base_im.copy()
+            draw = ImageDraw.Draw(frame, 'RGBA')
+            
+            # Head position moves forward
+            head_dist = (i / TOTAL_FRAMES) * total_length
+            
+            # Draw Snake segments (Head to Tail)
+            POINTS_COUNT = 25
+            step = SNAKE_LEN / POINTS_COUNT
+            
+            for j in range(POINTS_COUNT):
+                dist_curr = head_dist - (j * step)
+                dist_prev = head_dist - ((j+1) * step)
+                
+                p1 = get_point_at_dist(dist_curr)
+                p2 = get_point_at_dist(dist_prev)
+                
+                # Alpha fades from 255 (head) to 0 (tail)
+                progress = 1 - (j / POINTS_COUNT)
+                alpha = int(255 * (progress ** 2)) # Quadratic fade for stronger head
+                width = 8 if j < 5 else 5
+                
+                # Draw Glow (Wide low alpha)
+                draw.line([p1, p2], fill=(snake_color[0], snake_color[1], snake_color[2], int(alpha/4)), width=width+8)
+                # Draw Core (Thin high alpha)
+                draw.line([p1, p2], fill=(snake_color[0], snake_color[1], snake_color[2], alpha), width=width)
+
+            # Resize to save space but keep decent quality
+            frame_small = frame.resize((850, 160), Image.Resampling.LANCZOS)
+            frames.append(frame_small)
+            
+        b = BytesIO()
+        frames[0].save(b, format="GIF", save_all=True, append_images=frames[1:], duration=60, loop=0, optimize=True)
+        b.seek(0)
+        return discord.File(b, filename=f"card_{rank_index}.gif")
+
+    def _render_base_card(self, player_data, rank_index):
         from PIL import Image, ImageDraw, ImageFont, ImageFilter
         import requests
         from io import BytesIO
