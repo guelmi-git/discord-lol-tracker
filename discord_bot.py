@@ -87,6 +87,9 @@ class LeagueDiscordBot(discord.Client):
                  desc = "✅ **Tracking activé ! Classement actuel :**\n" + "\n".join(summary)
                  await channel.send(embed=discord.Embed(title="Bot Started", description=desc, color=discord.Color.blue()))
 
+            # Initial Leaderboard Update
+            await self.update_leaderboard()
+
 
         logging.info('Tracker initialized. Starting polling loop.')
         self.loop.create_task(self.polling_loop())
