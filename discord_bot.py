@@ -144,7 +144,6 @@ class LeagueDiscordBot(discord.Client):
         return await loop.run_in_executor(None, self._generate_leaderboard_image_sync, sorted_players)
 
     async def generate_player_card_async(self, player_data, rank_index):
-        """Generates a single player card in a non-blocking way."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._generate_player_card_sync, player_data, rank_index)
 
@@ -153,14 +152,13 @@ class LeagueDiscordBot(discord.Client):
         import requests
         from io import BytesIO
 
-        # Configuration (WIDE MODE)
+        # Configuration (CYBERPUNK WIDE)
         WIDTH = 1700 
         HEIGHT = 320
-        PADDING = 40
         
         # Colors
         BG_COLOR = (10, 12, 18)
-        CARD_BG = (30, 32, 45)
+        CARD_BG = (20, 22, 30)
         TEXT_WHITE = (255, 255, 255)
         TEXT_GRAY = (200, 200, 200)
         
@@ -168,137 +166,180 @@ class LeagueDiscordBot(discord.Client):
         NEON_GOLD = (255, 215, 0)
         NEON_SILVER = (224, 224, 224)
         NEON_BRONZE = (205, 127, 50)
-        NEON_DEFAULT = (130, 130, 150) # Brighter Steel Grey
+        NEON_DEFAULT = (130, 130, 200) # Cyber Blue-Grey
         
-        NEON_GREEN = (80, 255, 120)
-        NEON_RED = (255, 80, 80)
+        NEON_GREEN = (0, 255, 100)
+        NEON_RED = (255, 60, 60)
 
         # Helper to load font
         def load_font(name, size):
             import os
-            
-            # 1. Try Downloading Orbitron
             try:
-                # Use a known stable URL for Orbitron Bold (TheLeagueOf)
                 url = "https://raw.githubusercontent.com/theleagueof/orbitron/master/Orbitron%20Bold.ttf"
                 r = requests.get(url, timeout=5)
                 if r.status_code == 200:
-                    font = ImageFont.truetype(BytesIO(r.content), size)
-                    return font
+                    return ImageFont.truetype(BytesIO(r.content), size)
             except Exception as e:
                 logging.warning(f"Failed to download Orbitron: {e}")
 
-            # 2. Try Local System Fonts (Linux Fallbacks)
             linux_fonts = [
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+                "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"
             ]
-            
             for f_path in linux_fonts:
                 if os.path.exists(f_path):
-                    try:
-                        font = ImageFont.truetype(f_path, size)
-                        return font
-                    except:
-                        pass
-
-            # 3. Try Common Local Names (Windows/Dev)
-            try:
-                return ImageFont.truetype("arial.ttf", size)
-            except:
-                pass
+                    try: return ImageFont.truetype(f_path, size)
+                    except: pass
             
-            logging.error(f"CRITICAL: Could not load ANY font for {name}. Using tiny default.")
+            try: return ImageFont.truetype("arial.ttf", size)
+            except: pass
             return ImageFont.load_default()
 
-        # Fonts - WIDE & SLEEK
-        font_rank_big = load_font("Bold", 65)  # #1
-        font_name = load_font("Black", 55)     # NAME (Smaller to fit)
-        font_details = load_font("Regular", 30) # Emerald II...
-        font_wr = load_font("Bold", 45)        # 55% WR (Subtle)
-        font_wl = load_font("Regular", 25)     # 100W - 50L
+        # Fonts
+        font_rank_big = load_font("Bold", 65) 
+        font_name = load_font("Black", 55)    
+        font_details = load_font("Regular", 30)
+        font_wr = load_font("Bold", 45)       
+        font_wl = load_font("Regular", 25)    
         
-        # Create Canvas (Single Card)
+        # Create Canvas
         im = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(im)
+        draw = ImageDraw.Draw(im, 'RGBA') # Enable Alpha drawing
         
-        # Border Color based on Rank
+        # Determine Border Color
         border_color = NEON_DEFAULT
         if rank_index == 0: border_color = NEON_GOLD
         elif rank_index == 1: border_color = NEON_SILVER
         elif rank_index == 2: border_color = NEON_BRONZE
         
-        # Draw Card Body (Full Width)
-        draw.rounded_rectangle((0, 0, WIDTH, HEIGHT), radius=40, fill=CARD_BG, outline=None)
+        # --- CYBERPUNK SHAPE ---
+        # Chamfered Corners: Cut Top-Left and Bottom-Right
+        CUT_SIZE = 40
+        points = [
+            (CUT_SIZE, 0),          # Top-Left start
+            (WIDTH, 0),             # Top-Right
+            (WIDTH, HEIGHT - CUT_SIZE), # Bottom-Right start
+            (WIDTH - CUT_SIZE, HEIGHT), # Bottom-Right end
+            (0, HEIGHT),            # Bottom-Left
+            (0, CUT_SIZE)           # Top-Left end
+        ]
         
-        # Left Accent (Thicker)
-        draw.rounded_rectangle((0, 0, 50, HEIGHT), radius=40, fill=border_color, corners=(True, False, False, True))
+        # 1. Base Dark Background
+        draw.polygon(points, fill=CARD_BG)
+        
+        # 2. Scanlines (Texture)
+        # Draw faint horizontal lines every 4 pixels
+        for y in range(0, HEIGHT, 4):
+            line_color = (0, 0, 0, 50) # Very faint black
+            draw.line([(0, y), (WIDTH, y)], fill=line_color, width=1)
+            
+        # 3. Tech Borders / Glow
+        # Main Border (Thin)
+        draw.polygon(points, outline=border_color, width=3)
+        
+        # Thick Accent: Top-Left Corner
+        draw.line([(CUT_SIZE, 0), (CUT_SIZE + 100, 0)], fill=border_color, width=8)
+        draw.line([(0, CUT_SIZE), (0, CUT_SIZE + 100)], fill=border_color, width=8)
+        draw.line([(0, CUT_SIZE), (CUT_SIZE, 0)], fill=border_color, width=8) # The slant
+        
+        # Thick Accent: Bottom-Right Corner
+        draw.line([(WIDTH - CUT_SIZE, HEIGHT), (WIDTH - CUT_SIZE - 100, HEIGHT)], fill=border_color, width=8)
+        draw.line([(WIDTH, HEIGHT - CUT_SIZE), (WIDTH, HEIGHT - CUT_SIZE - 100)], fill=border_color, width=8)
+        draw.line([(WIDTH, HEIGHT - CUT_SIZE), (WIDTH - CUT_SIZE, HEIGHT)], fill=border_color, width=8) # The slant
 
-        # 1. Position Number
+        # 4. Position Number Background (Hexagon-ish)
+        # Just a visual block on the left
+        pos_bg_points = [
+            (CUT_SIZE, 0),
+            (220, 0),
+            (240, HEIGHT),
+            (0, HEIGHT),
+            (0, CUT_SIZE)
+        ]
+        # Draw translucent background for Rank
+        poly_color = (border_color[0], border_color[1], border_color[2], 30) # Low Alpha
+        draw.polygon(pos_bg_points, fill=poly_color)
+
+        # 5. Text & Content
+        
+        # #1 Rank
         pos_text = f"#{rank_index + 1}"
-        draw.text((140, HEIGHT//2), pos_text, font=font_rank_big, fill=border_color, anchor="mm")
+        draw.text((100, HEIGHT//2), pos_text, font=font_rank_big, fill=border_color, anchor="mm")
 
         rank_info = player_data.get('last_rank')
         
-        # 2. Rank Icon
+        # Rank Icon
         icon_x = 280
         if rank_info and rank_info['tier'] in self.RANK_EMBLEMS:
             try:
                 url = self.RANK_EMBLEMS[rank_info['tier']]
                 resp = requests.get(url, timeout=5)
                 icon = Image.open(BytesIO(resp.content)).convert("RGBA")
-                
                 if icon.getbbox(): icon = icon.crop(icon.getbbox())
                 
-                # 190px Icon
                 target_icon_h = 190
                 icon_final = icon.resize((target_icon_h, target_icon_h), Image.Resampling.LANCZOS)
+                
+                # Glow behind icon?
+                # halo = Image.new('RGBA', icon_final.size, (255, 255, 255, 0))
+                # ... (Skipping complex blur for speed) ...
                 
                 icon_y = (HEIGHT - target_icon_h) // 2
                 im.paste(icon_final, (icon_x, icon_y), icon_final)
             except Exception as e:
                 logging.error(f"Failed to load rank icon: {e}")
         
-        # 3. Player Name
+        # Player Name
         name_x = icon_x + 240
         draw.text((name_x, 115), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
         
-        # 4. Rank Text
+        # Rank Details
         if rank_info:
-            tier_str = f"{rank_info['tier'].title()} {rank_info['rank']}"
-            lp_str = f"{rank_info['leaguePoints']} LP"
-            full_rank = f"{tier_str}  •  {lp_str}"
+            full_rank = f"{rank_info['tier'].title()} {rank_info['rank']}  //  {rank_info['leaguePoints']} LP"
             draw.text((name_x, 185), full_rank, font=font_details, fill=border_color, anchor="lm")
         else:
-            draw.text((name_x, 185), "Unranked", font=font_details, fill=TEXT_GRAY, anchor="lm")
+            draw.text((name_x, 185), "UNRANKED_DATA_MISSING", font=font_details, fill=TEXT_GRAY, anchor="lm")
 
-        # 5. Win/Loss Stats
+        # Win/Loss Stats (Right Side)
         if rank_info:
             wins = rank_info.get('wins', 0)
             losses = rank_info.get('losses', 0)
             total = wins + losses
             wr = (wins / total * 100) if total > 0 else 0
             
-            stats_x = WIDTH - PADDING - 60
+            stats_x = WIDTH - 60 # PADDING
             
             # WR %
             draw.text((stats_x, 100), f"{wr:.1f}% WR", font=font_wr, fill=TEXT_WHITE, anchor="rm")
             
             # W/L
-            wl_str = f"{wins}W - {losses}L"
+            wl_str = f"[{wins}W  -  {losses}L]"
             draw.text((stats_x, 160), wl_str, font=font_wl, fill=TEXT_GRAY, anchor="rm")
             
-            # Glow Bar
-            bar_w = 250
-            bar_h = 10
+            # Tech Winrate Bar
+            bar_w = 300
+            bar_h = 15
             bar_x = stats_x - bar_w
             bar_y = 210
             
-            draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), fill=(40, 40, 50))
+            # Empty Bar (Outline)
+            draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), outline=(60, 60, 70), width=2)
+            
+            # Filled Bar (Blocks)
             fill_w = int(bar_w * (wr / 100))
             color_bar = NEON_GREEN if wr >= 50 else NEON_RED
-            draw.rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h), fill=color_bar)
+            
+            # Draw as segmented blocks
+            block_w = 10
+            num_blocks = fill_w // (block_w + 2)
+            for i in range(num_blocks):
+                bx = bar_x + (i * (block_w + 2)) + 2
+                draw.rectangle((bx, bar_y + 3, bx + block_w, bar_y + bar_h - 3), fill=color_bar)
+
+        b = BytesIO()
+        im.save(b, format="PNG")
+        b.seek(0)
+        return discord.File(b, filename=f"card_{rank_index}.png")
 
         # Output
         b = BytesIO()
