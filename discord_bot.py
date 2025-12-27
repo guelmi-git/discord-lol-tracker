@@ -105,19 +105,125 @@ class LeagueDiscordBot(discord.Client):
                     timeout=60.0 # 60 seconds max
                 )
                 
-                for alert in alerts:
-                    # Find participant info for the player
-                    p_data = alert['player']
-                    match = alert['match']
-                    # Find the participant dict for this player's PUUID
-                    participant = next((p for p in match['info']['participants'] if p['puuid'] == p_data['puuid']), None)
+                if alerts:
+                    for alert in alerts:
+                        # Find participant info for the player
+                        p_data = alert['player']
+                        match = alert['match']
+                        # Find the participant dict for this player's PUUID
+                        participant = next((p for p in match['info']['participants'] if p['puuid'] == p_data['puuid']), None)
+                        
+                        if participant:
+                            embed, file_attachment = await self.create_match_embed(p_data, match, participant, alert['rank'], alert['lp_diff'])
+                            if channel:
+                                await channel.send(embed=embed, file=file_attachment)
+                            else:
+                                logging.error("Channel not available for sending alert.")
                     
-                    if participant:
-                        embed, file_attachment = await self.create_match_embed(p_data, match, participant, alert['rank'], alert['lp_diff'])
-                        if channel:
-                            await channel.send(embed=embed, file=file_attachment)
-                        else:
-                            logging.error("Channel not available for sending alert.")
+                    # Update Leaderboard after a batch of alerts
+                    await self.update_leaderboard()
+            except asyncio.TimeoutError:
+                logging.error("Tracker check timed out! Skipping this cycle.")
+            except Exception as e:
+                logging.error(f"Error in polling loop: {e}")
+            
+            if self.one_shot:
+                logging.info("One-shot mode finished. Exiting.")
+                await self.close()
+                break
+                
+            await asyncio.sleep(120) # 2 minutes
+    
+    async def update_leaderboard(self):
+        """Updates the leaderboard channel with the current ranking."""
+        leaderboard_channel_id = self.config.get("DISCORD_LEADERBOARD_CHANNEL_ID")
+        if not leaderboard_channel_id:
+            return
+
+        try:
+            channel = self.get_channel(int(leaderboard_channel_id))
+            if not channel:
+                # Try fetching if not in cache (sometimes happens on startup)
+                try:
+                    channel = await self.fetch_channel(int(leaderboard_channel_id))
+                except Exception:
+                    logging.error(f"Could not find Leaderboard Channel {leaderboard_channel_id}")
+                    return
+        except ValueError:
+            logging.error("Invalid Leaderboard Channel ID config")
+            return
+
+        # 1. Get & Sort Players
+        players_data = list(self.tracker.players.values())
+        
+        # Helper for sorting
+        TIER_VALUES = {
+            "CHALLENGER": 9000, "GRANDMASTER": 8000, "MASTER": 7000,
+            "DIAMOND": 5000, "EMERALD": 4000, "PLATINUM": 3000,
+            "GOLD": 2000, "SILVER": 1000, "BRONZE": 500, "IRON": 0,
+            "UNRANKED": -1
+        }
+        
+        ROMAN_VALUES = {"I": 4, "II": 3, "III": 2, "IV": 1} # Higher is better for sorting math (I > IV)
+
+        def rank_key(p):
+            rank_info = p.get('last_rank')
+            if not rank_info:
+                return -1
+            
+            tier_score = TIER_VALUES.get(rank_info['tier'], 0)
+            division_score = ROMAN_VALUES.get(rank_info['rank'], 0) * 100 # I=400, IV=100
+            lp = rank_info['leaguePoints']
+            
+            # Special case for Apex tiers (Master+) where only LP matters on top of tier
+            if tier_score >= 7000:
+                return tier_score + lp
+            
+            return tier_score + division_score + lp
+
+        sorted_players = sorted(players_data, key=rank_key, reverse=True)
+
+        # 2. Format Message
+        description_lines = []
+        medals = ["🥇", "🥈", "🥉"]
+        
+        for idx, p in enumerate(sorted_players):
+            rank_data = p.get('last_rank')
+            riot_id = p['riot_id']
+            
+            if idx < 3:
+                prefix = medals[idx]
+            else:
+                prefix = f"**{idx + 1}.**"
+            
+            if rank_data:
+                tier = rank_data['tier'].title() # "Platinum"
+                division = rank_data['rank']
+                lp = rank_data['leaguePoints']
+                
+                # Try to emulate user request: "Guelmi "Icon Platine" II 50 LP"
+                # We can try to use an emoji if valid, or just text.
+                # Assuming no custom emojis yet, let's stick to text for now but clean.
+                
+                line = f"{prefix} **{riot_id}** • {tier} {division} • **{lp} LP**"
+            else:
+                line = f"{prefix} **{riot_id}** • Unranked"
+            
+            description_lines.append(line)
+
+        embed = discord.Embed(title="🏆 CLASSEMENT DU SERVEUR", description="\n".join(description_lines), color=0xF1C40F)
+        embed.set_footer(text="Mis à jour en temps réel")
+
+        # 3. Clean & Send
+        try:
+            # Purge recent messages to keep channel clean (limit=10 should be enough)
+            # Check permissions first? Assuming bot has manage_messages
+            await channel.purge(limit=10)
+            await channel.send(embed=embed)
+            logging.info("Leaderboard updated.")
+        except Exception as e:
+            logging.error(f"Failed to update leaderboard: {e}") 
+
             
             except asyncio.TimeoutError:
                 logging.error("Tracker check timed out! Skipping this cycle.")

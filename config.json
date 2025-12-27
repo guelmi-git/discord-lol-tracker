@@ -1,7 +1,8 @@
 {
     "riot_api_key": "YOUR_RIOT_API_KEY",
     "discord_bot_token": "YOUR_DISCORD_BOT_TOKEN",
-    "discord_channel_id": "YOUR_CHANNEL_ID",
+    "discord_channel_id": "1316499882202075207",
+    "DISCORD_LEADERBOARD_CHANNEL_ID": "1454426465813925950",
     "players": [
         {
             "riot_id": "Guelmi#9595",
