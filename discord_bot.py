@@ -450,10 +450,7 @@ class LeagueDiscordBot(discord.Client):
                 if x < bar_x + fill_w:
                     draw.rectangle(rect, fill=color_bar)
 
-        b = BytesIO()
-        im.save(b, format="PNG")
-        b.seek(0)
-        return discord.File(b, filename=f"card_{rank_index}.png")
+        return im
 
     async def update_leaderboard(self):
         """Updates the leaderboard channel with the current ranking."""
