@@ -173,18 +173,19 @@ class LeagueDiscordBot(discord.Client):
         # 1. Generate Base Image (Expensive operation, do once)
         base_im = self._render_base_card(player_data, rank_index)
         
-        # 2. Setup Snake Path (Rectangular)
+        # 2. Setup Snake Path (Chamfered Rect)
         WIDTH = 1700
         HEIGHT = 320
-        # CUT = 0, Simple Rectangle path
+        CUT = 40
         
-        # Coordinates of the polygon corners (TopLeft -> TopRight -> BottomRight -> BottomLeft)
+        # Coordinates of the polygon corners
         path_nodes = [
-            (0, 0),                         # Top-Left
+            (0, CUT), (CUT, 0),             # Chamfer Top-Left
             (WIDTH, 0),                     # Top-Right
-            (WIDTH, HEIGHT),                # Bottom-Right
+            (WIDTH, HEIGHT - CUT),          # Chamfer Bottom-Right Start
+            (WIDTH - CUT, HEIGHT),          # Chamfer Bottom-Right End
             (0, HEIGHT),                    # Bottom-Left
-            (0, 0)                          # Loop back to start
+            (0, CUT)                        # Loop back to start
         ]
         
         # Calculate total path length and segments
@@ -264,59 +265,52 @@ class LeagueDiscordBot(discord.Client):
         return discord.File(b, filename=f"card_{rank_index}.gif")
 
     def _render_base_card(self, player_data, rank_index):
-        from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+        from PIL import Image, ImageDraw, ImageFont, ImageFilter
         import requests
         from io import BytesIO
         import random
         import discord
-        import math
-        import os
 
-        # Configuration (ANIME STYLE)
+        # Configuration (ULTIMATE STATIC)
         WIDTH = 1700 
         HEIGHT = 320
         
-        # Colors (Vibrant Anime)
-        BG_DARK = (10, 10, 20) # Deep space blue
+        # Colors
+        BG_DARK = (5, 7, 12)
         
         TEXT_WHITE = (255, 255, 255)
-        TEXT_YELLOW = (255, 240, 100) # Super Saiyan Yellow
         TEXT_GRAY = (200, 200, 200)
         
-        # Rank Colors (Bright/Magical)
-        NEON_GOLD = (255, 220, 0)
-        NEON_SILVER = (200, 240, 255)
-        NEON_BRONZE = (255, 140, 60)
-        NEON_DEFAULT = (0, 200, 255) # Energy Blue
+        # Rank Colors
+        NEON_GOLD = (255, 215, 0)
+        NEON_SILVER = (192, 192, 192) # Slightly darker for contrast
+        NEON_BRONZE = (205, 127, 50)
+        NEON_DEFAULT = (100, 200, 255) # Cyber Blue
         
-        NEON_GREEN = (50, 255, 100)
-        NEON_RED = (255, 80, 80)
+        NEON_GREEN = (0, 255, 100)
+        NEON_RED = (255, 60, 60)
 
-        # Helper to load font - Using "Bangers" for Anime feel if possible, else Bold
-        def load_font(name, size, font_url=None):
+        # Helper to load font
+        def load_font(name, size):
             import os
-            if font_url:
-                try:
-                    r = requests.get(font_url, timeout=5)
-                    if r.status_code == 200:
-                        return ImageFont.truetype(BytesIO(r.content), size)
-                except: pass
-            
-            # Fallbacks
+            try:
+                url = "https://raw.githubusercontent.com/theleagueof/orbitron/master/Orbitron%20Bold.ttf"
+                r = requests.get(url, timeout=5)
+                if r.status_code == 200:
+                    return ImageFont.truetype(BytesIO(r.content), size)
+            except: pass
+
             try: return ImageFont.truetype("arial.ttf", size)
             except: pass
             return ImageFont.load_default()
 
-        # Fonts - Anime Style
-        # BANGERS font for impact
-        url_bangers = "https://github.com/google/fonts/raw/main/ofl/bangers/Bangers-Regular.ttf"
-        
-        font_rank_big = load_font("Bangers", 90, url_bangers) 
-        font_name = load_font("Bangers", 80, url_bangers)    
-        font_details = load_font("Bold", 35) # Keep readable font for details
-        font_wr = load_font("Bangers", 60, url_bangers)       
-        font_wl = load_font("Bangers", 45, url_bangers) # Bigger & Banger style
-        font_tiny = load_font("Bold", 20) 
+        # Fonts
+        font_rank_big = load_font("Bold", 70) 
+        font_name = load_font("Black", 60)    
+        font_details = load_font("Bold", 35)
+        font_wr = load_font("Bold", 50)       
+        font_wl = load_font("Regular", 28) 
+        font_tiny = load_font("Regular", 15) 
 
         # Create Canvas
         im = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
@@ -328,55 +322,63 @@ class LeagueDiscordBot(discord.Client):
         elif rank_index == 1: theme_color = NEON_SILVER
         elif rank_index == 2: theme_color = NEON_BRONZE
 
-        # --- A. BACKGROUND (HIGH-END ASSETS) ---
-        # Determining Background Asset
-        bg_filename = "bg_bronze.png" # Default
-        if rank_index == 0: bg_filename = "bg_gold.png"
-        elif rank_index == 1: bg_filename = "bg_silver.png"
+        # --- A. BACKGROUND ---
+        # Dark base
+        draw.polygon([(40,0), (WIDTH,0), (WIDTH, HEIGHT-40), (WIDTH-40, HEIGHT), (0, HEIGHT), (0, 40)], fill=BG_DARK)
         
-        asset_path = f"assets/{bg_filename}"
-        bg_loaded = False
+        # Tech Grid (Static Clean)
+        for x in range(0, WIDTH, 50):
+            draw.line([(x, 0), (x, HEIGHT)], fill=(30, 40, 60, 80), width=1)
+        for y in range(0, HEIGHT, 50):
+            draw.line([(0, y), (WIDTH, y)], fill=(30, 40, 60, 80), width=1)
         
-        try:
-            # Try loading local asset
-            if os.path.exists(asset_path):
-                bg_img = Image.open(asset_path).convert("RGBA")
-                # FIX: Use ImageOps.fit to preserve aspect ratio (crop center) instead of stretch
-                bg_img = ImageOps.fit(bg_img, (WIDTH, HEIGHT), method=Image.Resampling.LANCZOS)
-                im.paste(bg_img, (0, 0))
-                bg_loaded = True
-        except Exception as e:
-            print(f"Error loading background {asset_path}: {e}")
+        # Random Decor (Seeded)
+        random.seed(rank_index)
+        for _ in range(8):
+            rx = random.randint(50, WIDTH-50)
+            ry = random.randint(50, HEIGHT-50)
+            rw = random.randint(20, 100)
+            draw.rectangle((rx, ry, rx+rw, ry+2), fill=(theme_color[0], theme_color[1], theme_color[2], 150))
 
-        if not bg_loaded:
-            # Fallback: Draw Gradient if asset missing
-            draw.rectangle((0,0, WIDTH, HEIGHT), fill=BG_DARK)
-            # Simple burst fallback
-            burst_x, burst_y = 300, HEIGHT // 2
-            for i in range(0, 360, 5): 
-                angle = math.radians(i)
-                x2 = burst_x + (WIDTH+500) * math.cos(angle)
-                y2 = burst_y + (WIDTH+500) * math.sin(angle)
-                draw.line([(burst_x, burst_y), (x2, y2)], fill=(theme_color[0], theme_color[1], theme_color[2], 20), width=2)
-
-        # --- B. SHAPE (Simple Rect with magical border) ---
-        # No more chamfer, just clean box with thick borders
-        CUT = 0 # No cut for full art background, just a frame
-        points = [(0,0), (WIDTH,0), (WIDTH,HEIGHT), (0,HEIGHT)]
+        # --- B. SHAPE & BORDERS ---
+        CUT = 40
+        points = [
+            (CUT, 0), (WIDTH, 0), (WIDTH, HEIGHT - CUT), 
+            (WIDTH - CUT, HEIGHT), (0, HEIGHT), (0, CUT)
+        ]
         
-        # Magical Aura Glow (Soft)
-        for w in [10, 5]:
-            draw.rectangle((0,0,WIDTH,HEIGHT), outline=(theme_color[0], theme_color[1], theme_color[2], 50), width=w)
-            
-        # Hard Border
-        draw.rectangle((0,0,WIDTH-1,HEIGHT-1), outline=theme_color, width=3)
+        # Glow Border
+        for w in [6, 4, 2]:
+            alpha = 50 + (30 * (6-w))
+            draw.polygon(points, outline=(theme_color[0], theme_color[1], theme_color[2], alpha), width=w)
 
-        # --- C. RANK ICON ---
-        icon_x = 300
+        # Thick Brackets
+        draw.line([(CUT-5, 0), (CUT+150, 0)], fill=theme_color, width=6)
+        draw.line([(0, CUT-5), (0, CUT+150)], fill=theme_color, width=6)
+        draw.line([(0, CUT), (CUT, 0)], fill=theme_color, width=6)
+
+        draw.line([(WIDTH-CUT+5, HEIGHT), (WIDTH-CUT-150, HEIGHT)], fill=theme_color, width=6)
+        draw.line([(WIDTH, HEIGHT-CUT+5), (WIDTH, HEIGHT-CUT-150)], fill=theme_color, width=6)
+        draw.line([(WIDTH, HEIGHT-CUT), (WIDTH-CUT, HEIGHT)], fill=theme_color, width=6)
+
+        # --- C. RANK SECTION (LEFT) ---
+        # FIX: Dark background for Rank Number, with Colored Outline
+        poly_bg = [(CUT, 0), (220, 0), (260, HEIGHT), (0, HEIGHT), (0, CUT)]
+        draw.polygon(poly_bg, fill=(10, 12, 20, 200)) # Semi-transparent Dark
+        draw.line([(220, 0), (260, HEIGHT)], fill=theme_color, width=2) # Divider Line
+        
+        draw.text((130, HEIGHT//2), f"#{rank_index + 1}", font=font_rank_big, fill=theme_color, anchor="mm")
+        draw.text((130, HEIGHT-40), "RANKING", font=font_tiny, fill=TEXT_GRAY, anchor="mm")
+
+        # --- D. RANK ICON & HOLOGRAM ---
+        icon_x = 340
         rank_info = player_data.get('last_rank')
         
-        # REMOVED: No background behind icon (Clean Look requested)
-
+        # Holographic Floor
+        holo_rect = [icon_x, HEIGHT-60, icon_x+180, HEIGHT-40]
+        draw.ellipse(holo_rect, fill=(theme_color[0], theme_color[1], theme_color[2], 50))
+        draw.ellipse(holo_rect, outline=theme_color, width=2)
+        
         if rank_info and rank_info['tier'] in self.RANK_EMBLEMS:
             try:
                 url = self.RANK_EMBLEMS[rank_info['tier']]
@@ -388,39 +390,32 @@ class LeagueDiscordBot(discord.Client):
                     resp = requests.get(url, timeout=3)
                     icon = Image.open(BytesIO(resp.content)).convert("RGBA")
                     if icon.getbbox(): icon = icon.crop(icon.getbbox())
-                    icon = icon.resize((220, 220), Image.Resampling.LANCZOS)
+                    icon = icon.resize((210, 210), Image.Resampling.LANCZOS)
                     self._icon_cache[key] = icon
                 
-                final_x = (icon_x + 90) - (220 // 2)
-                final_y = (HEIGHT - 220) // 2
+                final_x = (icon_x + 90) - (210 // 2)
+                final_y = (HEIGHT - 210) // 2 - 15
                 im.paste(icon, (final_x, final_y), icon)
             except: pass
 
-        # --- D. RANK NUMBER (Big Impact) ---
-        # Draw a "Seal" or Circle behind the number
-        seal_x = 150
-        seal_y = HEIGHT // 2
-        seal_r = 70
-        draw.ellipse((seal_x-seal_r, seal_y-seal_r, seal_x+seal_r, seal_y+seal_r), fill=(0,0,0, 150), outline=theme_color, width=4)
-        
-        draw.text((seal_x, seal_y), f"#{rank_index + 1}", font=font_rank_big, fill=TEXT_YELLOW, anchor="mm", stroke_width=2, stroke_fill=(0,0,0))
-
         # --- E. INFO & STATS ---
-        name_x = icon_x + 230
+        name_x = icon_x + 240
         
-        # Name with Outline (Anime Style)
-        draw.text((name_x, 100), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm", stroke_width=3, stroke_fill=(0,0,0))
+        draw.text((name_x, 60), f"// SUMMONER_ID: {player_data['riot_id']}", font=font_tiny, fill=theme_color, anchor="lm")
+        draw.text((name_x, 110), player_data['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
         
-        # Rank Details (Bubble)
         if rank_info:
-            detail_text = f"{rank_info['tier']} {rank_info['rank']} | {rank_info['leaguePoints']} LP"
+            detail_text = f"{rank_info['tier']} {rank_info['rank']} // {rank_info['leaguePoints']} LP"
         else:
             detail_text = "UNRANKED"
-        
-        # Glowing text
-        draw.text((name_x, 170), detail_text, font=font_details, fill=theme_color, anchor="lm")
+            
+        # FIX: Darker Glass Panel for readability
+        txt_bbox = draw.textbbox((name_x, 180), detail_text, font=font_details)
+        pill_rect = (name_x - 10, 160, txt_bbox[2] + 20, 200)
+        draw.rounded_rectangle(pill_rect, radius=8, fill=(0, 0, 0, 180), outline=theme_color, width=1)
+        draw.text((name_x, 180), detail_text, font=font_details, fill=theme_color, anchor="lm")
 
-        # --- F. WINRATE (Big Numbers) ---
+        # --- F. WINRATE HUD ---
         stats_x = WIDTH - 80
         if rank_info:
             wins = rank_info.get('wins', 0)
@@ -428,26 +423,32 @@ class LeagueDiscordBot(discord.Client):
             total = wins + losses
             wr = (wins / total * 100) if total > 0 else 0
             
-            # Big WR
-            draw.text((stats_x, 100), f"{wr:.1f}%", font=font_wr, fill=TEXT_WHITE, anchor="rm", stroke_width=2, stroke_fill=theme_color)
-            draw.text((stats_x, 60), "WIN RATE", font=font_tiny, fill=theme_color, anchor="rm")
+            draw.text((stats_x, 100), f"{wr:.1f}%", font=font_name, fill=TEXT_WHITE, anchor="rm")
+            draw.text((stats_x, 60), "WINRATE_CALC", font=font_tiny, fill=TEXT_GRAY, anchor="rm")
+            draw.text((stats_x, 150), f"{wins}W / {losses}L", font=font_wl, fill=TEXT_GRAY, anchor="rm")
             
-            # W/L - BIGGER AND WHITE
-            draw.text((stats_x, 160), f"{wins}W - {losses}L", font=font_wl, fill=TEXT_WHITE, anchor="rm")
-            
-            # Energy Bar
-            bar_w = 400
-            bar_h = 20
+            # Segmented Bar
+            bar_w = 350
+            bar_h = 12
             bar_x = stats_x - bar_w
             bar_y = 210
             
-            # Empty Container
-            draw.rectangle((bar_x, bar_y, bar_x+bar_w, bar_y+bar_h), fill=(20, 20, 30), outline=theme_color, width=2)
+            draw.text((bar_x, bar_y - 20), "PERFORMANCE_METRICS", font=font_tiny, fill=theme_color, anchor="lm")
             
-            # Fill
-            fill_w = int(bar_w * (wr / 100))
+            # Background Bar
+            draw.rectangle((bar_x, bar_y, bar_x+bar_w, bar_y+bar_h), fill=(30, 30, 40), outline=None)
+            
+            # Filled Segments
             color_bar = NEON_GREEN if wr >= 50 else NEON_RED
-            draw.rectangle((bar_x+2, bar_y+2, bar_x+fill_w-2, bar_y+bar_h-2), fill=color_bar)
+            fill_w = int(bar_w * (wr / 100))
+            
+            seg_w = 10
+            gap = 4
+            for i in range(bar_w // (seg_w + gap)):
+                x = bar_x + i * (seg_w + gap)
+                rect = [x, bar_y, x+seg_w, bar_y+bar_h]
+                if x < bar_x + fill_w:
+                    draw.rectangle(rect, fill=color_bar)
 
         return im
 
