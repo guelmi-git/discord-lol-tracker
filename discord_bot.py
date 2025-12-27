@@ -264,7 +264,7 @@ class LeagueDiscordBot(discord.Client):
         return discord.File(b, filename=f"card_{rank_index}.gif")
 
     def _render_base_card(self, player_data, rank_index):
-        from PIL import Image, ImageDraw, ImageFont, ImageFilter
+        from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
         import requests
         from io import BytesIO
         import random
@@ -341,7 +341,8 @@ class LeagueDiscordBot(discord.Client):
             # Try loading local asset
             if os.path.exists(asset_path):
                 bg_img = Image.open(asset_path).convert("RGBA")
-                bg_img = bg_img.resize((WIDTH, HEIGHT), Image.Resampling.LANCZOS)
+                # FIX: Use ImageOps.fit to preserve aspect ratio (crop center) instead of stretch
+                bg_img = ImageOps.fit(bg_img, (WIDTH, HEIGHT), method=Image.Resampling.LANCZOS)
                 im.paste(bg_img, (0, 0))
                 bg_loaded = True
         except Exception as e:
@@ -363,26 +364,22 @@ class LeagueDiscordBot(discord.Client):
         CUT = 0 # No cut for full art background, just a frame
         points = [(0,0), (WIDTH,0), (WIDTH,HEIGHT), (0,HEIGHT)]
         
-        # Magical Aura Glow (Soft) - Only if using Fallback, or overlay on image?
-        # Let's add a subtle inner glow frame
+        # Magical Aura Glow (Soft)
         for w in [10, 5]:
             draw.rectangle((0,0,WIDTH,HEIGHT), outline=(theme_color[0], theme_color[1], theme_color[2], 50), width=w)
             
         # Hard Border
         draw.rectangle((0,0,WIDTH-1,HEIGHT-1), outline=theme_color, width=3)
 
-        # --- C. RANK ICON & AURA ---
+        # --- C. RANK ICON ---
         icon_x = 300
         rank_info = player_data.get('last_rank')
         
-        # Super Saiyan Aura (Behind Icon)
-        # Draw random glowing circles
-        for _ in range(5):
-            rx = random.randint(-20, 20)
-            ry = random.randint(-20, 20)
-            rs = random.randint(220, 260)
-            bbox = [icon_x+90 - rs//2 + rx, HEIGHT//2 - rs//2 + ry, icon_x+90 + rs//2 + rx, HEIGHT//2 + rs//2 + ry]
-            draw.ellipse(bbox, fill=(theme_color[0], theme_color[1], theme_color[2], 30))
+        # REMOVED: Super Saiyan Aura Bubbles (User dislike)
+        # Instead, just a subtle shadow behind the icon to make it pop
+        icon_shadow_rect = [icon_x+90 - 110, HEIGHT//2 - 110, icon_x+90 + 110, HEIGHT//2 + 110]
+        # Soft black glow behind icon
+        draw.ellipse(icon_shadow_rect, fill=(0,0,0,100))
 
         if rank_info and rank_info['tier'] in self.RANK_EMBLEMS:
             try:
