@@ -315,7 +315,7 @@ class LeagueDiscordBot(discord.Client):
         font_name = load_font("Bangers", 80, url_bangers)    
         font_details = load_font("Bold", 35) # Keep readable font for details
         font_wr = load_font("Bangers", 60, url_bangers)       
-        font_wl = load_font("Bold", 30) 
+        font_wl = load_font("Bangers", 45, url_bangers) # Bigger & Banger style
         font_tiny = load_font("Bold", 20) 
 
         # Create Canvas
@@ -375,11 +375,7 @@ class LeagueDiscordBot(discord.Client):
         icon_x = 300
         rank_info = player_data.get('last_rank')
         
-        # REMOVED: Super Saiyan Aura Bubbles (User dislike)
-        # Instead, just a subtle shadow behind the icon to make it pop
-        icon_shadow_rect = [icon_x+90 - 110, HEIGHT//2 - 110, icon_x+90 + 110, HEIGHT//2 + 110]
-        # Soft black glow behind icon
-        draw.ellipse(icon_shadow_rect, fill=(0,0,0,100))
+        # REMOVED: No background behind icon (Clean Look requested)
 
         if rank_info and rank_info['tier'] in self.RANK_EMBLEMS:
             try:
@@ -436,8 +432,8 @@ class LeagueDiscordBot(discord.Client):
             draw.text((stats_x, 100), f"{wr:.1f}%", font=font_wr, fill=TEXT_WHITE, anchor="rm", stroke_width=2, stroke_fill=theme_color)
             draw.text((stats_x, 60), "WIN RATE", font=font_tiny, fill=theme_color, anchor="rm")
             
-            # W/L
-            draw.text((stats_x, 160), f"{wins}W - {losses}L", font=font_wl, fill=TEXT_GRAY, anchor="rm")
+            # W/L - BIGGER AND WHITE
+            draw.text((stats_x, 160), f"{wins}W - {losses}L", font=font_wl, fill=TEXT_WHITE, anchor="rm")
             
             # Energy Bar
             bar_w = 400
