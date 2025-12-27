@@ -175,33 +175,44 @@ class LeagueDiscordBot(discord.Client):
 
         # Helper to load font
         def load_font(name, size):
-            # Try specific styles or default to Medium
-            style_map = {
-                "Bold": "Bold",
-                "Black": "Black",
-                "Regular": "Medium" # Variable font usually has weights, but strict static files might be limited.
-            }
-            style = style_map.get(name, "Bold")
+            import os
             
+            # 1. Try Downloading Orbitron
             try:
-                # Try loading Orbitron (Static)
-                url = f"https://github.com/google/fonts/raw/main/ofl/orbitron/static/Orbitron-{style}.ttf"
+                # Use a known stable URL for Orbitron Bold (TheLeagueOf)
+                url = "https://raw.githubusercontent.com/theleagueof/orbitron/master/Orbitron%20Bold.ttf"
                 r = requests.get(url, timeout=5)
                 if r.status_code == 200:
-                    return ImageFont.truetype(BytesIO(r.content), size)
+                    font = ImageFont.truetype(BytesIO(r.content), size)
+                    # logging.info(f"Loaded Orbitron from Web for {name}") 
+                    return font
             except Exception as e:
-                logging.error(f"Failed to load Orbitron-{style}: {e}")
+                logging.warning(f"Failed to download Orbitron: {e}")
 
+            # 2. Try Local System Fonts (Linux Fallbacks)
+            linux_fonts = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+            ]
+            
+            for f_path in linux_fonts:
+                if os.path.exists(f_path):
+                    try:
+                        font = ImageFont.truetype(f_path, size)
+                        logging.info(f"Loaded System Font: {f_path}")
+                        return font
+                    except:
+                        pass
+
+            # 3. Try Common Local Names (Windows/Dev)
             try:
-                # Fallback to Roboto
-                url = "https://github.com/google/fonts/raw/main/apache/roboto/static/Roboto-Bold.ttf"
-                r = requests.get(url, timeout=5)
-                if r.status_code == 200:
-                     return ImageFont.truetype(BytesIO(r.content), size)
+                return ImageFont.truetype("arial.ttf", size)
             except:
                 pass
             
-            logging.warning(f"Fallback to default font for {name}")
+            # 4. Total Failure -> Default Bitmap (Tiny)
+            logging.error(f"CRITICAL: Could not load ANY font for {name}. Using tiny default.")
             return ImageFont.load_default()
 
         # Fonts - ENORMOUS
