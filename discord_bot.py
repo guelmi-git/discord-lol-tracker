@@ -175,12 +175,34 @@ class LeagueDiscordBot(discord.Client):
 
         # Helper to load font
         def load_font(name, size):
+            # Try specific styles or default to Medium
+            style_map = {
+                "Bold": "Bold",
+                "Black": "Black",
+                "Regular": "Medium" # Variable font usually has weights, but strict static files might be limited.
+            }
+            style = style_map.get(name, "Bold")
+            
             try:
-                url = f"https://github.com/google/fonts/raw/main/ofl/orbitron/Orbitron-{name}.ttf"
+                # Try loading Orbitron (Static)
+                url = f"https://github.com/google/fonts/raw/main/ofl/orbitron/static/Orbitron-{style}.ttf"
                 r = requests.get(url, timeout=5)
-                return ImageFont.truetype(BytesIO(r.content), size)
+                if r.status_code == 200:
+                    return ImageFont.truetype(BytesIO(r.content), size)
+            except Exception as e:
+                logging.error(f"Failed to load Orbitron-{style}: {e}")
+
+            try:
+                # Fallback to Roboto
+                url = "https://github.com/google/fonts/raw/main/apache/roboto/static/Roboto-Bold.ttf"
+                r = requests.get(url, timeout=5)
+                if r.status_code == 200:
+                     return ImageFont.truetype(BytesIO(r.content), size)
             except:
-                return ImageFont.load_default()
+                pass
+            
+            logging.warning(f"Fallback to default font for {name}")
+            return ImageFont.load_default()
 
         # Fonts - ENORMOUS
         font_rank_big = load_font("Bold", 110) # #1
