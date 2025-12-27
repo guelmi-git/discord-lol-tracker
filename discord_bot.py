@@ -148,108 +148,151 @@ class LeagueDiscordBot(discord.Client):
         import requests
         from io import BytesIO
 
-        # Config dimensions
-        ROW_HEIGHT = 100
-        HEADER_HEIGHT = 80
-        WIDTH = 1000
+        # --- CONFIGURATION ---
+        WIDTH = 1200
+        HEADER_HEIGHT = 120
+        CARD_HEIGHT = 160
         PADDING = 20
-        total_height = HEADER_HEIGHT + (len(sorted_players) * ROW_HEIGHT) + PADDING
+        GAP = 15
+        
+        # Colors (Neon/Futuristic Palette)
+        BG_COLOR = (10, 12, 18)   # Deep Space Blue
+        CARD_BG = (23, 25, 35)    # Lighter Dark
+        TEXT_WHITE = (230, 230, 230)
+        TEXT_GRAY = (150, 150, 160)
+        
+        # Accents
+        NEON_CYAN = (0, 255, 240)
+        NEON_GOLD = (255, 215, 0)
+        NEON_SILVER = (192, 192, 192)
+        NEON_BRONZE = (205, 127, 50)
+        NEON_RED = (255, 50, 50)
+        NEON_GREEN = (50, 255, 100)
 
-        # Colors
-        BG_COLOR = (30, 31, 34) # Discord Dark
-        ROW_BG_EVEN = (43, 45, 49)
-        ROW_BG_ODD = (30, 31, 34)
-        TEXT_WHITE = (255, 255, 255)
-        TEXT_GOLD = (255, 215, 0)
-        ACCENT_COLOR = (88, 101, 242) # Blurple
+        total_height = HEADER_HEIGHT + (len(sorted_players) * (CARD_HEIGHT + GAP)) + PADDING
 
-        # Load Font (Roboto)
-        try:
-            font_url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
-            resp = requests.get(font_url)
-            font_large = ImageFont.truetype(BytesIO(resp.content), 40)
-            font_medium = ImageFont.truetype(BytesIO(resp.content), 30)
-            font_small = ImageFont.truetype(BytesIO(resp.content), 24)
-        except:
-            font_large = ImageFont.load_default()
-            font_medium = ImageFont.load_default()
-            font_small = ImageFont.load_default()
+        # Helper to load font
+        def load_font(name, size):
+            try:
+                # Orbitron for futuristic look
+                url = f"https://github.com/google/fonts/raw/main/ofl/orbitron/Orbitron-{name}.ttf"
+                r = requests.get(url, timeout=5)
+                return ImageFont.truetype(BytesIO(r.content), size)
+            except:
+                return ImageFont.load_default()
 
-        # Create Image
+        font_header = load_font("Black", 60)
+        font_rank_big = load_font("Bold", 45)
+        font_name = load_font("Bold", 40)
+        font_stats = load_font("Regular", 28)
+        font_small = load_font("Regular", 20)
+
+        # Create Canvas
         im = Image.new('RGBA', (WIDTH, total_height), BG_COLOR)
         draw = ImageDraw.Draw(im)
 
-        # Header
-        draw.rectangle((0, 0, WIDTH, HEADER_HEIGHT), fill=ACCENT_COLOR)
-        draw.text((WIDTH//2, HEADER_HEIGHT//2), "CLASSEMENT SOLO/DUO", font=font_large, fill=TEXT_WHITE, anchor="mm")
+        # --- HEADER ---
+        # Draw a top neon bar
+        draw.rectangle((0, 0, WIDTH, 10), fill=NEON_CYAN)
+        
+        # Title with "Glow" effect (simulated by drawing multiple times slightly offset? or just nice color)
+        title_text = "SOLO/DUO LEADERBOARD"
+        # Shadow
+        draw.text((WIDTH//2 + 4, HEADER_HEIGHT//2 + 4), title_text, font=font_header, fill=(0, 50, 50), anchor="mm")
+        # Main
+        draw.text((WIDTH//2, HEADER_HEIGHT//2), title_text, font=font_header, fill=NEON_CYAN, anchor="mm")
 
-        # Rows
+        # --- PLAYERS ---
         for idx, p in enumerate(sorted_players):
-            y_pos = HEADER_HEIGHT + (idx * ROW_HEIGHT)
+            y_start = HEADER_HEIGHT + (idx * (CARD_HEIGHT + GAP))
+            y_end = y_start + CARD_HEIGHT
             
-            # Row Background
-            if idx % 2 == 0:
-                draw.rectangle((0, y_pos, WIDTH, y_pos + ROW_HEIGHT), fill=ROW_BG_EVEN)
-            else:
-                draw.rectangle((0, y_pos, WIDTH, y_pos + ROW_HEIGHT), fill=ROW_BG_ODD)
+            # 1. Card Background
+            # Top 3 get special borders
+            border_color = (40, 40, 50) # Default dark purple-ish
+            if idx == 0: border_color = NEON_GOLD
+            elif idx == 1: border_color = NEON_SILVER
+            elif idx == 2: border_color = NEON_BRONZE
+            
+            # Draw Card Body
+            draw.rounded_rectangle((PADDING, y_start, WIDTH - PADDING, y_end), radius=15, fill=CARD_BG, outline=None)
+            
+            # Left Accent Border (Thick)
+            draw.rounded_rectangle((PADDING, y_start, PADDING + 10, y_end), radius=15, fill=border_color, corners=(True, False, False, True))
+
+            # 2. Position Number
+            pos_text = f"#{idx + 1}"
+            draw.text((PADDING + 60, y_start + CARD_HEIGHT//2), pos_text, font=font_rank_big, fill=border_color, anchor="mm")
 
             rank_data = p.get('last_rank')
             
-            # 1. Position
-            pos_text = f"#{idx + 1}"
-            pos_color = TEXT_WHITE
-            if idx == 0: pos_color = TEXT_GOLD
-            if idx == 1: pos_color = (192, 192, 192) # Silver
-            if idx == 2: pos_color = (205, 127, 50) # Bronze
-            
-            draw.text((50, y_pos + ROW_HEIGHT//2), pos_text, font=font_large, fill=pos_color, anchor="mm")
-
-            # 2. Rank Icon
+            # 3. Rank Icon (LARGE)
+            icon_x = PADDING + 120
             if rank_data and rank_data['tier'] in self.RANK_EMBLEMS:
-                url = self.RANK_EMBLEMS[rank_data['tier']]
                 try:
-                    icon_resp = requests.get(url)
-                    icon_img = Image.open(BytesIO(icon_resp.content)).convert("RGBA")
-                    # Crop transparency
-                    bbox = icon_img.getbbox()
-                    if bbox: icon_img = icon_img.crop(bbox)
+                    url = self.RANK_EMBLEMS[rank_data['tier']]
+                    resp = requests.get(url, timeout=5)
+                    icon = Image.open(BytesIO(resp.content)).convert("RGBA")
                     
-                    # Resize
-                    icon_size = 80
-                    icon_img = icon_img.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
-                    im.paste(icon_img, (120, y_pos + 10), icon_img)
-                except:
-                    pass
-
-            # 3. Name
-            draw.text((250, y_pos + ROW_HEIGHT//2 - 15), p['riot_id'], font=font_medium, fill=TEXT_WHITE, anchor="lm")
-
-            # 4. Rank Text
+                    # Crop transparency
+                    bbox = icon.getbbox()
+                    if bbox: icon = icon.crop(bbox)
+                    
+                    # Resize to fit card height cleanly
+                    icon_final = icon.resize((130, 130), Image.Resampling.LANCZOS)
+                    
+                    # Centered vertically in card
+                    icon_y = y_start + (CARD_HEIGHT - 130) // 2
+                    im.paste(icon_final, (icon_x, icon_y), icon_final)
+                except Exception as e:
+                    logging.error(f"Failed to load rank icon for {rank_data['tier']}: {e}")
+            
+            # 4. Player Name
+            name_x = icon_x + 150
+            draw.text((name_x, y_start + 50), p['riot_id'], font=font_name, fill=TEXT_WHITE, anchor="lm")
+            
+            # 5. Rank Text (e.g. "Emerald II - 50 LP")
             if rank_data:
-                rank_str = f"{rank_data['tier'].title()} {rank_data['rank']} - {rank_data['leaguePoints']} LP"
-                draw.text((250, y_pos + ROW_HEIGHT//2 + 20), rank_str, font=font_small, fill=(200, 200, 200), anchor="lm")
+                rank_str = f"{rank_data['tier'].title()} {rank_data['rank']} • {rank_data['leaguePoints']} LP"
+                draw.text((name_x, y_start + 100), rank_str, font=font_stats, fill=border_color, anchor="lm")
             else:
-                draw.text((250, y_pos + ROW_HEIGHT//2 + 20), "Unranked", font=font_small, fill=(200, 200, 200), anchor="lm")
+                draw.text((name_x, y_start + 100), "Unranked", font=font_stats, fill=TEXT_GRAY, anchor="lm")
 
-            # 5. Win/Loss Stats
+            # 6. Win/Loss Stats (Right Side)
             if rank_data:
                 wins = rank_data.get('wins', 0)
                 losses = rank_data.get('losses', 0)
                 total = wins + losses
                 wr = (wins / total * 100) if total > 0 else 0
                 
-                stats_str = f"{wins}W / {losses}L"
-                wr_str = f"{wr:.1f}% WR"
+                # Draw separate lines
+                stats_x = WIDTH - PADDING - 40
                 
-                # Align right
-                draw.text((WIDTH - 50, y_pos + ROW_HEIGHT//2 - 15), stats_str, font=font_medium, fill=(100, 255, 100), anchor="rm")
-                draw.text((WIDTH - 50, y_pos + ROW_HEIGHT//2 + 20), wr_str, font=font_small, fill=(200, 200, 200), anchor="rm")
+                # Winrate Big
+                draw.text((stats_x, y_start + 50), f"{wr:.1f}% WR", font=font_stats, fill=TEXT_WHITE, anchor="rm")
+                
+                # W/L Small
+                wl_str = f"{wins}W - {losses}L"
+                draw.text((stats_x, y_start + 90), wl_str, font=font_small, fill=TEXT_GRAY, anchor="rm")
+                
+                # Visual Bar for Winrate
+                bar_w = 150
+                bar_h = 6
+                bar_x = stats_x - bar_w
+                bar_y = y_start + 115
+                
+                # Background bar
+                draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), fill=(50, 50, 50))
+                # Fill bar
+                fill_w = int(bar_w * (wr / 100))
+                color_bar = NEON_GREEN if wr >= 50 else NEON_RED
+                draw.rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h), fill=color_bar)
 
         # Output
         b = BytesIO()
         im.save(b, format="PNG")
         b.seek(0)
-        return discord.File(b, filename="leaderboard.png")
+        return discord.File(b, filename="leaderboard_futuristic.png")
 
     async def update_leaderboard(self):
         """Updates the leaderboard channel with the current ranking."""
