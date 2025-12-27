@@ -225,17 +225,7 @@ class LeagueDiscordBot(discord.Client):
             logging.error(f"Failed to update leaderboard: {e}") 
 
             
-            except asyncio.TimeoutError:
-                logging.error("Tracker check timed out! Skipping this cycle.")
-            except Exception as e:
-                logging.error(f"Error in polling loop: {e}")
-            
-            if self.one_shot:
-                logging.info("One-shot mode finished. Exiting.")
-                await self.close()
-                break
-                
-            await asyncio.sleep(120) # 2 minutes
+
     
     async def combine_images_async(self, champion_id, rank_tier):
         """Downloads Champion Icon and Rank Emblem, stacks them vertically, and returns a discord.File."""
