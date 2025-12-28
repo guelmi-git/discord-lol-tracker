@@ -318,12 +318,12 @@ class LeagueDiscordBot(discord.Client):
         for y in range(0, HEIGHT, 50):
             draw.line([(0, y), (WIDTH, y)], fill=(30, 40, 60, 80), width=1)
         
-        # Random Decor (Seeded)
-        random.seed(rank_index)
+        # Random Decor (Seeded locally to avoid affecting global random)
+        rng = random.Random(rank_index)
         for _ in range(8):
-            rx = random.randint(50, WIDTH-50)
-            ry = random.randint(50, HEIGHT-50)
-            rw = random.randint(20, 100)
+            rx = rng.randint(50, WIDTH-50)
+            ry = rng.randint(50, HEIGHT-50)
+            rw = rng.randint(20, 100)
             draw.rectangle((rx, ry, rx+rw, ry+2), fill=(theme_color[0], theme_color[1], theme_color[2], 150))
 
         # --- B. SHAPE & BORDERS ---
