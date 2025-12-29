@@ -438,6 +438,50 @@ class LeagueDiscordBot(discord.Client):
 
         return im
 
+    def _analyze_performance(self, p, game_duration):
+        """Analyzes player stats and returns a list of tags."""
+        tags = []
+        
+        minutes = game_duration / 60
+        if minutes < 10: return tags # Too short to judge
+        
+        # 1. CS Analysis (Skip for Support)
+        role = p.get('teamPosition', '')
+        is_support = role == 'UTILITY'
+        
+        cs = p.get('totalMinionsKilled', 0) + p.get('neutralMinionsKilled', 0)
+        cs_min = cs / minutes
+        
+        if not is_support:
+            if cs_min >= 8.0: tags.append("🚜 MACHINE DE FARM")
+            elif cs_min >= 7.0: tags.append("🌾 BON FARMING")
+            elif cs_min < 4.5: tags.append("💀 CS GAP")
+            
+        # 2. Combat (KDA)
+        k = p.get('kills', 0)
+        d = max(1, p.get('deaths', 1))
+        a = p.get('assists', 0)
+        kda = (k + a) / d
+        
+        if kda >= 5.0: tags.append("🗡️ HARD CARRY")
+        elif kda >= 3.0: tags.append("🛡️ SOLIDE")
+        elif kda < 1.0: tags.append("⚰️ FEEDER")
+        
+        if d >= 10: tags.append("🏥 INTING")
+        
+        # 3. Vision
+        vision = p.get('visionScore', 0)
+        vis_min = vision / minutes
+        
+        if vis_min > 1.5: tags.append("👁️ ORACLE")
+        elif vis_min < 0.5: tags.append("😎 AVEUGLE")
+        
+        # 4. Objectives (Towers)
+        dmg_towers = p.get('damageDealtToTurrets', 0)
+        if dmg_towers > 5000: tags.append("🏰 DEMOLISSEUR")
+        
+        return tags
+
     async def update_leaderboard(self):
         """Updates the leaderboard channel with the current ranking."""
         leaderboard_channel_id = self.config.get("DISCORD_LEADERBOARD_CHANNEL_ID")
@@ -690,6 +734,13 @@ class LeagueDiscordBot(discord.Client):
                  embed.set_thumbnail(url="attachment://combined.png")
 
         # Footer
-        embed.set_footer(text=f"Match Duration: {minutes}m {seconds}s")
+        tags = self._analyze_performance(participant_info, game_duration)
+        tag_str = " | ".join(tags)
+        
+        footer_text = f"Match Duration: {minutes}m {seconds}s"
+        if tag_str:
+            footer_text += f"\n{tag_str}"
+            
+        embed.set_footer(text=footer_text)
         
         return embed, file_attachment
