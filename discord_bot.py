@@ -104,9 +104,9 @@ class LeagueDiscordBot(discord.Client):
                         participant = next((p for p in match['info']['participants'] if p['puuid'] == p_data['puuid']), None)
                         
                         if participant:
-                            embed, file_attachment = await self.create_match_embed(p_data, match, participant, alert['rank'], alert['lp_diff'])
+                            embed, files = await self.create_match_embed(p_data, match, participant, alert['rank'], alert['lp_diff'])
                             if channel:
-                                await channel.send(embed=embed, file=file_attachment)
+                                await channel.send(embed=embed, files=files)
                             else:
                                 logging.error("Channel not available for sending alert.")
                     
@@ -438,6 +438,59 @@ class LeagueDiscordBot(discord.Client):
 
         return im
 
+    async def generate_item_strip_async(self, item_ids):
+        """Generates a horizontal strip of item icons."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._generate_item_strip_sync, item_ids)
+
+    def _generate_item_strip_sync(self, item_ids):
+        from PIL import Image, ImageDraw
+        import requests
+        from io import BytesIO
+
+        # Config
+        ICON_SIZE = 48
+        PADDING = 4
+        TOTAL_ITEMS = 7 # 6 items + 1 trinket
+        WIDTH = (ICON_SIZE * TOTAL_ITEMS) + (PADDING * (TOTAL_ITEMS - 1))
+        HEIGHT = ICON_SIZE
+        
+        # Canvas
+        im = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
+        
+        # Version for DDragon
+        DDRAGON_VER = "14.24.1"
+        
+        for i, item_id in enumerate(item_ids):
+            if item_id == 0: continue # Empty slot
+            
+            try:
+                url = f"https://ddragon.leagueoflegends.com/cdn/{DDRAGON_VER}/img/item/{item_id}.png"
+                resp = requests.get(url, timeout=2)
+                if resp.status_code == 200:
+                    icon = Image.open(BytesIO(resp.content)).convert("RGBA")
+                    icon = icon.resize((ICON_SIZE, ICON_SIZE), Image.Resampling.LANCZOS)
+                    
+                    # Rounded corners for items
+                    mask = Image.new("L", (ICON_SIZE, ICON_SIZE), 0)
+                    draw = ImageDraw.Draw(mask)
+                    draw.rounded_rectangle((0, 0, ICON_SIZE, ICON_SIZE), radius=8, fill=255)
+                    
+                    icon_rounded = Image.new("RGBA", (ICON_SIZE, ICON_SIZE))
+                    icon_rounded.paste(icon, (0, 0), mask)
+                    
+                    # Paste onto strip
+                    x_pos = i * (ICON_SIZE + PADDING)
+                    im.paste(icon_rounded, (x_pos, 0))
+            except Exception as e:
+                pass # Just leave empty if failed
+                
+        b = BytesIO()
+        im.save(b, format="PNG")
+        b.seek(0)
+        import discord
+        return discord.File(b, filename="items.png")
+
     def _analyze_performance(self, p, game_duration):
         """Analyzes player stats and returns a list of tags."""
         tags = []
@@ -725,13 +778,23 @@ class LeagueDiscordBot(discord.Client):
         
         # 5. Visuals - Composite Image
         champ_id = participant_info.get('championId')
-        file_attachment = None
+        files = []
         
         if champ_id:
-             # Generate the combined image (Champion + Rank)
-             file_attachment = await self.combine_images_async(champ_id, tier)
-             if file_attachment:
+             # Champion + Rank
+             file_champ = await self.combine_images_async(champ_id, tier)
+             if file_champ:
                  embed.set_thumbnail(url="attachment://combined.png")
+                 files.append(file_champ)
+                 
+        # 6. Items Strip
+        item_ids = [participant_info.get(f'item{i}', 0) for i in range(7)]
+        # Check if at least one item exists
+        if any(item_ids):
+            file_items = await self.generate_item_strip_async(item_ids)
+            if file_items:
+                embed.set_image(url="attachment://items.png")
+                files.append(file_items)
 
         # Footer
         tags = self._analyze_performance(participant_info, game_duration)
@@ -743,4 +806,4 @@ class LeagueDiscordBot(discord.Client):
             
         embed.set_footer(text=footer_text)
         
-        return embed, file_attachment
+        return embed, files
