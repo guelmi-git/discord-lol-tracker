@@ -458,8 +458,14 @@ class LeagueDiscordBot(discord.Client):
         # Canvas
         im = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
         
-        # Version for DDragon
-        DDRAGON_VER = "14.24.1"
+        # Version for DDragon (Dynamic)
+        DDRAGON_VER = "15.1.1" # Default Fallback
+        try:
+             ver_resp = requests.get("https://ddragon.leagueoflegends.com/api/versions.json", timeout=2)
+             if ver_resp.status_code == 200:
+                 DDRAGON_VER = ver_resp.json()[0]
+        except:
+             pass 
         
         for i, item_id in enumerate(item_ids):
             if item_id == 0: continue # Empty slot
