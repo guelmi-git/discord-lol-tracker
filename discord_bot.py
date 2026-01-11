@@ -7,16 +7,16 @@ import random
 
 class LeagueDiscordBot(discord.Client):
     RANK_EMBLEMS = {
-        "IRON": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-iron.png",
-        "BRONZE": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-bronze.png",
-        "SILVER": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-silver.png",
-        "GOLD": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-gold.png",
-        "PLATINUM": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-platinum.png",
-        "EMERALD": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-emerald.png",
-        "DIAMOND": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-diamond.png",
-        "MASTER": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-master.png",
-        "GRANDMASTER": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-grandmaster.png",
-        "CHALLENGER": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-challenger.png"
+        "IRON": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-iron.png",
+        "BRONZE": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-bronze.png",
+        "SILVER": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-silver.png",
+        "GOLD": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-gold.png",
+        "PLATINUM": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-platinum.png",
+        "EMERALD": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-emerald.png",
+        "DIAMOND": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-diamond.png",
+        "MASTER": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-master.png",
+        "GRANDMASTER": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-grandmaster.png",
+        "CHALLENGER": "https://raw.communitydragon.org/pbe/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem/emblem-challenger.png"
     }
 
     # Removed hardcoded VICTORY/DEFEAT messages as per user request to use only JSON files.
