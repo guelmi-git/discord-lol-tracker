@@ -641,7 +641,7 @@ class LeagueDiscordBot(discord.Client):
             return im
 
         # 1. Download Champion Icon
-        champ_url = f"https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/{champion_id}.png"
+        champ_url = f"https://raw.communitydragon.org/pbe/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/{champion_id}.png"
         resp_champ = requests.get(champ_url)
         img_champ = Image.open(BytesIO(resp_champ.content)).convert("RGBA")
         
